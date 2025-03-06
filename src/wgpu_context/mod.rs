@@ -1,22 +1,22 @@
 use wgpu::{Adapter, CompositeAlphaMode, Device, Features, Instance, InstanceFlags, MemoryHints, Queue, Surface, SurfaceConfiguration, TextureUsages};
 
-pub struct WGPUContext<'a> {
+pub struct WGPUContext {
 	instance: Instance,
-	surface: Surface<'a>,
+	surface: Surface<'static>,
 	adapter: Adapter,
 	device: Device,
 	queue: Queue,
 	config: SurfaceConfiguration,
 }
 
-impl<'a> WGPUContext<'a> {
-	pub fn new(window: &'a winit::window::Window) -> Self {
+impl WGPUContext {
+	pub fn new(window: std::sync::Arc<winit::window::Window>) -> Self {
 		let instance = Instance::new(&wgpu::InstanceDescriptor{
 			backends: wgpu::Backends::VULKAN,
 			flags: InstanceFlags::DEBUG | InstanceFlags::VALIDATION,
 			..Default::default()
 		});
-		// SAFETY: (UNSURE) lifetime of window borrow is extended to 'static to allow self referential app struct
+		let size = window.inner_size();
 		let surface = instance.create_surface(window)
 			.expect("Could not create surface");
 
@@ -26,7 +26,6 @@ impl<'a> WGPUContext<'a> {
 		})).expect("Could not create adapter");
 
 		let capabilities = surface.get_capabilities(&adapter);
-		let size = window.inner_size();
 
 		let config = wgpu::SurfaceConfiguration {
 			usage: TextureUsages::RENDER_ATTACHMENT,
@@ -47,6 +46,15 @@ impl<'a> WGPUContext<'a> {
 			},
 			None,
 		)).expect("Could not create device and queue");
+
+		device.on_uncaptured_error(Box::new(|error| {
+			match error {
+				wgpu::Error::OutOfMemory{..} => log::error!("Out of memory"),
+				wgpu::Error::Validation{description, ..} => log::error!("Validation Error: {description}"),
+				wgpu::Error::Internal{description, ..} => log::error!("Internal Error: {description}"),
+			}
+			std::process::exit(1);
+		}));
 
 		surface.configure(&device, &config);
 		Self {

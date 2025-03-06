@@ -1,4 +1,4 @@
-mod key_map {
+pub mod key_map {
     use std::collections::{HashMap, HashSet};
 
     use winit::event::ElementState;
