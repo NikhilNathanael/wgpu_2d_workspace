@@ -1,7 +1,8 @@
 pub struct App{
 	title: &'static str,
 	window: Option<winit::window::Window>,
-	sender: std::sync::mpsc::Sender<()>,
+	sender: std::sync::mpsc::Sender<()>,	
+	render_context: Option<WGPUContext<'static>>,
 }
 
 impl App {
@@ -12,13 +13,24 @@ impl App {
 			title,
 			window: None,
 			sender: snd,
+			render_context: None,
 		}
+	}
+
+	pub fn window(&self) -> &winit::window::Window {
+		self.window.as_ref().unwrap()
+	}
+
+	pub fn render_context (&self) -> &WGPUContext {
+		self.render_context.as_ref().unwrap()
 	}
 }
 
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 use winit::event::WindowEvent;
+
+use crate::wgpu_context::WGPUContext;
 
 impl winit::application::ApplicationHandler for App {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -29,6 +41,8 @@ impl winit::application::ApplicationHandler for App {
 			).unwrap()),
 			_ => (),
 		}
+		// SAFETY: (UNSURE) External code has to check anyway whether window is still active 
+		self.render_context = unsafe{std::mem::transmute(Some(WGPUContext::new(&self.window())))};
 	}
 
 	fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -60,7 +74,7 @@ impl winit::application::ApplicationHandler for App {
 				// You only need to call this if you've determined that you need to redraw in
 				// applications which do not always need to. Applications that redraw continuously
 				// can render here instead.
-				// self.window.as_ref().unwrap().request_redraw();
+				self.window().request_redraw();
 			}
 			_ => (),
 		}
