@@ -16,7 +16,7 @@ use worker_thread::create_application_thread;
 
 pub struct App{
 	title: &'static str,
-	key_map: KeyMap,
+	key_map: Arc<KeyMap>,
 	inner: Option<AppInner>,
 }
 
@@ -117,22 +117,7 @@ impl winit::application::ApplicationHandler for App {
 
 mod worker_thread {
 	use super::super::wgpu_context::WGPUContext;
-	use wgpu::{
-		TextureViewDescriptor,
-		Texture,
-		TextureViewDimension,
-		TextureUsages,
-		TextureAspect,
-		CommandEncoderDescriptor,
-		RenderPassDescriptor,
-		RenderPassColorAttachment,
-		ShaderModuleDescriptor,
-		ShaderSource,
-		Operations,
-		LoadOp,
-		StoreOp,
-		Color,
-	};
+	use wgpu::*;
 	use std::sync::Arc;
 	use std::sync::mpsc::Receiver;
 
@@ -141,21 +126,56 @@ mod worker_thread {
 	const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
 
 	pub fn create_application_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
+		let shader_path = SHADER_DIRECTORY.to_owned() + "triangle.wgsl";
+
+		println!("{:?}", shader_path);
+		let shader_source = std::fs::read_to_string(&shader_path)
+			.expect("Could not read file");
+
+		let shader_module = context.device().create_shader_module(ShaderModuleDescriptor{
+			label: Some(&shader_path),
+			source: ShaderSource::Wgsl(Cow::Borrowed(&shader_source)),
+		});
+
+		let render_pipeline = context.device().create_render_pipeline(&RenderPipelineDescriptor{
+			label: Some("render pipeline"),
+			layout: None,
+			vertex: VertexState{
+				module: &shader_module,
+				entry_point: None,
+				compilation_options: Default::default(),
+				buffers: &[],
+			},
+			fragment: Some(FragmentState{
+				module: &shader_module,
+				entry_point: None,
+				compilation_options: Default::default(),
+				targets: &[
+					Some(ColorTargetState{
+						format: context.config().format,
+						blend: None,
+						write_mask: ColorWrites::ALL,
+					})
+				],
+			}),
+			primitive: PrimitiveState {
+				topology: PrimitiveTopology::TriangleStrip,
+				strip_index_format: None,
+				front_face: FrontFace::Ccw,
+				cull_mode: None,
+				..Default::default()
+			},
+			depth_stencil: None,
+			multisample: Default::default(),
+			multiview: None,
+			cache: None,
+		});
+
 		move || {
 			// wait until main thread sends signal to start rendering
 			while let Ok(()) = rcv.recv() {
 				// consume all sent signals if rendering took too long
 				rcv.try_iter().for_each(|_| {});
-
-				// let shader_path = SHADER_DIRECTORY.to_owned() + "triangle.wgsl";
-				// println!("{:?}", shader_path);
-				// let shader_source = std::fs::read_to_string(&shader_path)
-				// 	.expect("Could not read file");
-
-				// let shader_module = context.device().create_shader_module(ShaderModuleDescriptor{
-				// 	label: Some(&shader_path),
-				// 	source: ShaderSource::Wgsl(Cow::Borrowed(&shader_source)),
-				// });
 
 				let surface_texture = context.surface().get_current_texture()
 					.expect("Could not create surface texture");
@@ -176,7 +196,7 @@ mod worker_thread {
 					label: Some("Command Encoder"),
 				});
 
-				let render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor{
+				let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor{
 					label: Some("Render pass"),
 					color_attachments: &[
 						Some(RenderPassColorAttachment{
@@ -190,6 +210,8 @@ mod worker_thread {
 					],
 					..Default::default()
 				});
+				render_pass.set_pipeline(&render_pipeline);
+				render_pass.draw(0..4, 0..1);
 				std::mem::drop(render_pass);
 				context.queue().submit([command_encoder.finish()]);
 				surface_texture.present();

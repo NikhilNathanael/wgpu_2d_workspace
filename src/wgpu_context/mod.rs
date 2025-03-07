@@ -78,4 +78,8 @@ impl WGPUContext {
 	pub fn queue(&self) -> &Queue {
 		&self.queue
 	}
+
+	pub fn config(&self) -> &SurfaceConfiguration {
+		&self.config
+	}
 }
