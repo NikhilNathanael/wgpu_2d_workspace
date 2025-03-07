@@ -13,6 +13,8 @@ use winit::keyboard::{Key, NamedKey};
 use super::wgpu_context::WGPUContext;
 use super::input::key_map::KeyMap;
 
+use crate::rendering::point::{PointRenderer, Point};
+
 
 
 pub struct App{
@@ -24,6 +26,7 @@ pub struct App{
 struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
+	scene: PointRenderer,
 }
 
 impl App {
@@ -59,9 +62,18 @@ impl winit::application::ApplicationHandler for App {
 				let render_context = WGPUContext::new(Arc::clone(&window));
 				let key_map = KeyMap::new();
 
+				let points = (0..200).map(|i| {
+					let angle = i as f32 * 2. * std::f32::consts::PI / 200.;
+					Point{
+						position: [angle.cos() * 100. + 400., angle.sin() * 100. + 400.],
+						color: [1., 1., 1., 1.],
+					}
+				}).collect::<Vec<_>>();
+				let scene = PointRenderer::new(points, &render_context);
 				self.inner = Some(AppInner{
 					window,
 					render_context,
+					scene,
 				});
 			}	
 			_ => (),
@@ -111,7 +123,8 @@ impl winit::application::ApplicationHandler for App {
 					base_array_layer: 0,
 					array_layer_count: None,
 				});
-
+				self.inner.as_ref().unwrap().scene.render(&texture_view, self.render_context());
+				
 				surface_texture.present();
 
 

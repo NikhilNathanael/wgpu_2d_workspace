@@ -104,7 +104,7 @@ pub struct VecAndBuffer<T> {
 }
 
 impl<T: Pod> VecAndBuffer<T> {
-	pub fn new(context: &WGPUContext, data: Vec<T>, usage: BufferUsages) -> Self {
+	pub fn new(data: Vec<T>, usage: BufferUsages, context: &WGPUContext) -> Self {
 		let buffer = create_buffer_with_size(std::mem::size_of_val(&*data) as u64, usage, context);
 		buffer.slice(..)
 			.get_mapped_range_mut()
@@ -136,14 +136,14 @@ pub struct DataAndBuffer<T> {
 
 
 impl<T: Pod> DataAndBuffer<T> {
-	pub fn new(context: &WGPUContext, data: T, usage: BufferUsages) -> Self {
+	pub fn new(data: T, usage: BufferUsages, context: &WGPUContext) -> Self {
 		const UNIFORM_BUFFER_ALIGNMENT: u64 = 16;
 		let buffer = create_buffer_with_size(
 			((std::mem::size_of::<T>() as u64 - 1) / UNIFORM_BUFFER_ALIGNMENT + 1) * UNIFORM_BUFFER_ALIGNMENT,
 			usage,
 			context,
 		);
-		buffer.slice(..)
+		buffer.slice(..(std::mem::size_of::<T>() as u64))
 			.get_mapped_range_mut()
 			.copy_from_slice(bytemuck::bytes_of(&data));
 		buffer.unmap();
