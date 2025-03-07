@@ -96,7 +96,6 @@ impl WGPUContext {
 		self.config.height = new_size.height;
 		self.surface.configure(&self.device, &self.config);
 	}
-
 }
 
 pub struct VecAndBuffer<T> {
@@ -119,7 +118,7 @@ impl<T: Pod> VecAndBuffer<T> {
 
 	pub fn update_buffer(&mut self, context: &WGPUContext) {
 		if self.buffer.size() < std::mem::size_of_val(&*self.data) as u64 {
-			self.buffer = Self::create_buffer_with_size(
+			self.buffer = create_buffer_with_size(
 				std::mem::size_of_val(&*self.data) as u64, 
 				self.buffer.usage(), 
 				context
@@ -155,7 +154,7 @@ impl<T: Pod> DataAndBuffer<T> {
 	}
 
 	pub fn update_buffer(&mut self, context: &WGPUContext) {
-		context.queue().write_buffer(&self.buffer, 0, bytemuck::cast_slice(&*self.data));
+		context.queue().write_buffer(&self.buffer, 0, bytemuck::bytes_of(&self.data));
 		context.queue().submit([]);
 	}
 }

@@ -2,14 +2,14 @@ pub mod point {
 	use std::sync::LazyLock;
 	use std::borrow::Cow;
 
-	use super::super::wgpu_context::{WGPUContext, SHADER_DIRECTORY};
+	use crate::wgpu_context::{WGPUContext, SHADER_DIRECTORY, VecAndBuffer, DataAndBuffer};
 	use wgpu::*;
 
 	use bytemuck::{Zeroable, Pod};
 
 	#[repr(C)]
 	#[derive(Zeroable, Pod, Clone, Copy)]
-	pub struct ScreenSizeUniform{
+	pub struct Uniform{
 		pub size: [f32;2],
 	}
 
@@ -20,18 +20,14 @@ pub mod point {
 		pub location: [f32;2],
 	}
 
-	// pub struct PointRenderer {
-	// 	points: Vec<Point>,
-	// 	uniform: [
-	// }
-
 	static POINT_SHADER_SOURCE: LazyLock<String> = LazyLock::new(|| {
 		std::fs::read_to_string(SHADER_DIRECTORY.to_owned() + "points.wgsl")
 			.expect("Could not read shader source")
 	});
 
 	struct PointRenderer {
-		point: Vec<Point>,
+		points: VecAndBuffer<Point>,
+		uniform: DataAndBuffer<Uniform>,
 	}
 
 	impl Point {
@@ -90,13 +86,13 @@ pub mod point {
 
 			let uniform_buffer = context.device().create_buffer(&BufferDescriptor{
 				label: Some("Point Uniform Buffer"),
-				size: ((std::mem::size_of::<ScreenSizeUniform>() as u64 - 1) / 16 + 1) * 16,
+				size: ((std::mem::size_of::<Uniform>() as u64 - 1) / 16 + 1) * 16,
 				usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
 				mapped_at_creation: false,
 			});
 			
 			let config = context.config();
-			let uniform = ScreenSizeUniform {
+			let uniform = Uniform {
 				size: [config.width as f32, config.height as f32],
 			};
 			println!("{:?}", uniform.size);
