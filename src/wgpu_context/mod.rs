@@ -1,5 +1,4 @@
 use wgpu::*;
-use arc_atomic::AtomicArc;
 use winit::dpi::PhysicalSize;
 use std::sync::Arc;
 
@@ -15,7 +14,7 @@ pub struct WGPUContext {
 	adapter: Adapter,
 	device: Device,
 	queue: Queue,
-	config: AtomicArc<SurfaceConfiguration>,
+	config: SurfaceConfiguration,
 }
 
 impl WGPUContext {
@@ -72,7 +71,7 @@ impl WGPUContext {
 			adapter,
 			device,
 			queue,
-			config: AtomicArc::new(Arc::new(config)),
+			config,
 		}
 	}
 
@@ -88,15 +87,38 @@ impl WGPUContext {
 		&self.queue
 	}
 
-	pub fn config(&self) -> Arc<SurfaceConfiguration> {
-		self.config.load()
+	pub fn config(&self) -> &SurfaceConfiguration {
+		&self.config
 	}
 
-	pub fn resize(&self, new_size: PhysicalSize<u32>) {
-		let mut old_config = self.config.load();
-		let new_config = Arc::make_mut(&mut old_config);
-		new_config.width = new_size.width;
-		new_config.height = new_size.height;
-		self.config.swap(old_config);
+	pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+		self.config.width = new_size.width;
+		self.config.height = new_size.height;
+		self.surface.configure(&self.device, &self.config);
+	}
+
+}
+
+pub struct VecAndBuffer<T> {
+	pub data: Vec<T>,
+	pub buffer: Buffer,
+}
+
+impl<T: Pod> VecAndBuffer<T> {
+	pub fn new(context: &WGPUContext, data: Vec<T>, usage: BufferUsages) -> Self {
+		let buffer = context.device().create_buffer(&BufferDescriptor{
+			label: None,
+			size: std::mem::size_of_val(&*data) as u64,
+			usage: BufferUsages::COPY_DST | usage,
+			mapped_at_creation: true, 
+		});
+		buffer.slice(..)
+			.get_mapped_range_mut()
+			.copy_from_slice(bytemuck::cast_slice(&*data));
+		buffer.unmap();
+		Self {
+			data,
+			buffer,
+		}
 	}
 }

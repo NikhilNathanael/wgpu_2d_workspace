@@ -16,11 +16,11 @@ struct Uniform {
 
 @vertex
 fn v_main(point: Point) -> V2F {
-	let clip_space = point.position / (uni.size * 2) - vec2<f32>(-1., 1.);
+	let clip_space = vec2<f32>(400., 400) / (uni.size) * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
 
 	var output: V2F;
 	output.color = point.color;
-	output.position = vec4<f32>(0., 0., 0., 1.);
+	output.position = vec4<f32>(clip_space, 0., 1.);
 	return output;
 }
 

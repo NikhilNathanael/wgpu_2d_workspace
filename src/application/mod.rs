@@ -2,17 +2,18 @@ use std::sync::mpsc::{channel, Sender, SendError};
 use std::sync::Arc;
 use std::thread;
 
+use wgpu::*;
+
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
-use winit::event::WindowEvent;
+use winit::event::{ElementState, WindowEvent};
+use winit::dpi::PhysicalSize;
+use winit::keyboard::{Key, NamedKey};
 
 use super::wgpu_context::WGPUContext;
 use super::input::key_map::KeyMap;
 
-use winit::keyboard::{Key, NamedKey};
-use winit::event::ElementState;
 
-use worker_thread::create_worker_thread;
 
 pub struct App{
 	title: &'static str,
@@ -22,16 +23,15 @@ pub struct App{
 
 struct AppInner {
 	window: Arc<Window>,
-	sender: Sender<()>,
-	render_context: Arc<WGPUContext>,
+	render_context: WGPUContext,
 }
 
 impl App {
 	pub fn new (title: &'static str) -> Self {
 		Self {
 			title,
-			inner: None,
 			key_map: KeyMap::new(),
+			inner: None,
 		}
 	}
 
@@ -40,11 +40,11 @@ impl App {
 	}
 
 	pub fn render_context (&self) -> &WGPUContext {
-		&*self.inner.as_ref().unwrap().render_context
+		&self.inner.as_ref().unwrap().render_context
 	}
 
-	pub fn send (&self) -> Result<(), SendError<()>> {
-		self.inner.as_ref().unwrap().sender.send(())
+	pub fn render_context_mut(&mut self) -> &mut WGPUContext {
+		&mut self.inner.as_mut().unwrap().render_context
 	}
 }
 
@@ -56,20 +56,11 @@ impl winit::application::ApplicationHandler for App {
 					Window::default_attributes()
 						.with_title(self.title.to_owned())
 					).expect("Could not create window"));
-				let render_context = Arc::new(WGPUContext::new(Arc::clone(&window)));
-				let (sender, rcv) = channel();
-				let key_map_send = sender.clone();
+				let render_context = WGPUContext::new(Arc::clone(&window));
+				let key_map = KeyMap::new();
 
-				self.key_map.register_callback(
-					Key::Named(NamedKey::Space), 
-					ElementState::Pressed,
-					move || {_ = key_map_send.send(());}, 
-				);
-
-				thread::spawn(create_worker_thread(rcv, Arc::clone(&render_context)));
 				self.inner = Some(AppInner{
 					window,
-					sender,
 					render_context,
 				});
 			}	
@@ -84,15 +75,13 @@ impl winit::application::ApplicationHandler for App {
 				event_loop.exit();
 			},
 			WindowEvent::KeyboardInput{event, ..} => {
-				self.key_map.handle_key(event.logical_key.clone(), event.state);
 				match event.logical_key {
 					Key::Named(NamedKey::Escape) => event_loop.exit(),
-					// Key::Named(NamedKey::Space) => self.send().unwrap(),
-					_ => (),
+					x => self.key_map.handle_key(x, event.state),
 				}
 			}
 			WindowEvent::Resized(new_size) => {
-				self.render_context().resize(new_size);
+				self.render_context_mut().resize(new_size);
 				self.window().request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
@@ -109,83 +98,11 @@ impl winit::application::ApplicationHandler for App {
 				// You only need to call this if you've determined that you need to redraw in
 				// applications which do not always need to. Applications that redraw continuously
 				// can render here instead.
-				self.send().unwrap();
-				self.window().request_redraw();
-			}
-			_ => (),
-		}
-	}		
-}
-
-mod worker_thread {
-	use super::super::wgpu_context::{WGPUContext, SHADER_DIRECTORY};
-	use wgpu::*;
-	use std::sync::Arc;
-	use std::sync::mpsc::Receiver;
-
-	use super::super::rendering::point::*;
-
-	use std::borrow::Cow;
-
-
-	pub fn create_worker_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
-		let shader_path = SHADER_DIRECTORY.to_owned() + "triangle.wgsl";
-
-		println!("{:?}", shader_path);
-		let shader_source = std::fs::read_to_string(&shader_path)
-			.expect("Could not read file");
-
-		let shader_module = context.device().create_shader_module(ShaderModuleDescriptor{
-			label: Some(&shader_path),
-			source: ShaderSource::Wgsl(Cow::Borrowed(&shader_source)),
-		});
-
-		let render_pipeline = context.device().create_render_pipeline(&RenderPipelineDescriptor{
-			label: Some("render pipeline"),
-			layout: None,
-			vertex: VertexState{
-				module: &shader_module,
-				entry_point: None,
-				compilation_options: Default::default(),
-				buffers: &[],
-			},
-			fragment: Some(FragmentState{
-				module: &shader_module,
-				entry_point: None,
-				compilation_options: Default::default(),
-				targets: &[
-					Some(ColorTargetState{
-						format: context.config().format,
-						blend: None,
-						write_mask: ColorWrites::ALL,
-					})
-				],
-			}),
-			primitive: PrimitiveState {
-				topology: PrimitiveTopology::TriangleStrip,
-				strip_index_format: None,
-				front_face: FrontFace::Ccw,
-				cull_mode: None,
-				..Default::default()
-			},
-			depth_stencil: None,
-			multisample: Default::default(),
-			multiview: None,
-			cache: None,
-		});
-
-		move || {
-			// wait until main thread sends signal to start rendering
-			while let Ok(()) = rcv.recv() {
-				// consume all sent signals if rendering took too long
-				rcv.try_iter().for_each(|_| {});
-
-				let surface_texture = context.surface().get_current_texture()
-					.expect("Could not create surface texture");
-				let current_texture = &surface_texture.texture;
-				let texture_view = current_texture.create_view(&TextureViewDescriptor{
+				let surface_texture = self.render_context().surface().get_current_texture()
+					.expect("Could not get current texture");
+				let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor{
 					label: Some("Render Texture"),
-					format: Some(current_texture.format()),
+					format: Some(surface_texture.texture.format()),
 					dimension: Some(TextureViewDimension::D2),
 					usage: Some(TextureUsages::RENDER_ATTACHMENT),
 					aspect: TextureAspect::All,
@@ -195,36 +112,13 @@ mod worker_thread {
 					array_layer_count: None,
 				});
 
-				Point {
-					location: [0.5, 0.],
-					color: [1., 1., 1., 1.],
-				}.render(&*context, &texture_view);
-
-				// let mut command_encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
-				// 	label: Some("Command Encoder"),
-				// });
-
-				// let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor{
-				// 	label: Some("Render pass"),
-				// 	color_attachments: &[
-				// 		Some(RenderPassColorAttachment{
-				// 			view: &texture_view,
-				// 			resolve_target: None,
-				// 			ops: Operations {
-				// 				load: LoadOp::Clear(Color{r: 1., g: 0., b:1., a:1.}),
-				// 				store: StoreOp::Store,
-				// 			}
-				// 		}),
-				// 	],
-				// 	..Default::default()
-				// });
-				// render_pass.set_pipeline(&render_pipeline);
-				// render_pass.draw(0..4, 0..1);
-				// std::mem::drop(render_pass);
-				// context.queue().submit([command_encoder.finish()]);
 				surface_texture.present();
+
+
+				self.window().request_redraw();
 			}
-			println!("{}", "thread exiting");
+			_ => (),
 		}
-	}
+	}		
 }
+

@@ -31,7 +31,7 @@ pub mod key_map {
 			}
 		}
 
-		pub fn register_callback<F: FnMut() + 'static> (&mut self, key: Key, state: ElementState, callback: F) {
+		pub fn register_callback<F: FnMut() + 'static + Send> (&mut self, key: Key, state: ElementState, callback: F) {
 			let entry = self.callbacks.entry(key)
 				.or_default();
 			match state {
@@ -81,8 +81,8 @@ pub mod key_map {
 	}
 
 	struct Callbacks {
-		on_press: Box<dyn FnMut()>,
-		on_release: Box<dyn FnMut()>,
+		on_press: Box<dyn FnMut() + Send>,
+		on_release: Box<dyn FnMut() + Send>,
 	}
 
 

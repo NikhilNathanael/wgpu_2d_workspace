@@ -20,6 +20,11 @@ pub mod point {
 		pub location: [f32;2],
 	}
 
+	// pub struct PointRenderer {
+	// 	points: Vec<Point>,
+	// 	uniform: [
+	// }
+
 	static POINT_SHADER_SOURCE: LazyLock<String> = LazyLock::new(|| {
 		std::fs::read_to_string(SHADER_DIRECTORY.to_owned() + "points.wgsl")
 			.expect("Could not read shader source")
@@ -94,6 +99,7 @@ pub mod point {
 			let uniform = ScreenSizeUniform {
 				size: [config.width as f32, config.height as f32],
 			};
+			println!("{:?}", uniform.size);
 
 			context.queue().write_buffer(&vertex_buffer, 0, bytemuck::bytes_of(self));
 			context.queue().write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniform));
@@ -146,4 +152,10 @@ pub mod triangle {
 	struct Triangle {
 
 	}
+}
+
+use super::wgpu_context::WGPUContext;
+
+pub trait Render {
+	fn render(&self, context: WGPUContext);
 }
