@@ -66,4 +66,16 @@ impl WGPUContext {
 			config
 		}
 	}
+
+	pub fn surface(&self) -> &Surface {
+		&self.surface
+	}
+
+	pub fn device(&self) -> &Device {
+		&self.device
+	}
+
+	pub fn queue(&self) -> &Queue {
+		&self.queue
+	}
 }

@@ -8,6 +8,7 @@ mod wgpu_context;
 mod input;
 
 fn main () {
+	println!("{}", env!("CARGO_MANIFEST_DIR"));
 	let event_loop = winit::event_loop::EventLoop::new()
 		.expect("Could not create event loop");
 	let mut app = App::new("My Application");

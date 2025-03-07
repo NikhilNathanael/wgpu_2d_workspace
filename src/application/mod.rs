@@ -12,6 +12,8 @@ use super::input::key_map::KeyMap;
 use winit::keyboard::{Key, NamedKey};
 use winit::event::ElementState;
 
+use worker_thread::create_application_thread;
+
 pub struct App{
 	title: &'static str,
 	key_map: KeyMap,
@@ -45,8 +47,6 @@ impl App {
 		self.inner.as_ref().unwrap().sender.send(())
 	}
 }
-
-
 
 impl winit::application::ApplicationHandler for App {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -115,14 +115,88 @@ impl winit::application::ApplicationHandler for App {
 	}		
 }
 
-fn create_application_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
-	move || {
-		// wait until main thread sends signal to start rendering
-		while let Ok(()) = rcv.recv() {
-			// consume all sent signals if rendering took too long
-			while let Ok(()) = rcv.try_recv() {}
-			println!("{}", "hello");
+mod worker_thread {
+	use super::super::wgpu_context::WGPUContext;
+	use wgpu::{
+		TextureViewDescriptor,
+		Texture,
+		TextureViewDimension,
+		TextureUsages,
+		TextureAspect,
+		CommandEncoderDescriptor,
+		RenderPassDescriptor,
+		RenderPassColorAttachment,
+		ShaderModuleDescriptor,
+		ShaderSource,
+		Operations,
+		LoadOp,
+		StoreOp,
+		Color,
+	};
+	use std::sync::Arc;
+	use std::sync::mpsc::Receiver;
+
+	use std::borrow::Cow;
+
+	const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
+
+	pub fn create_application_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
+		move || {
+			// wait until main thread sends signal to start rendering
+			while let Ok(()) = rcv.recv() {
+				// consume all sent signals if rendering took too long
+				rcv.try_iter().for_each(|_| {});
+
+				// let shader_path = SHADER_DIRECTORY.to_owned() + "triangle.wgsl";
+				// println!("{:?}", shader_path);
+				// let shader_source = std::fs::read_to_string(&shader_path)
+				// 	.expect("Could not read file");
+
+				// let shader_module = context.device().create_shader_module(ShaderModuleDescriptor{
+				// 	label: Some(&shader_path),
+				// 	source: ShaderSource::Wgsl(Cow::Borrowed(&shader_source)),
+				// });
+
+				let surface_texture = context.surface().get_current_texture()
+					.expect("Could not create surface texture");
+				let current_texture = &surface_texture.texture;
+				let texture_view = current_texture.create_view(&TextureViewDescriptor{
+					label: Some("Render Texture"),
+					format: Some(current_texture.format()),
+					dimension: Some(TextureViewDimension::D2),
+					usage: Some(TextureUsages::RENDER_ATTACHMENT),
+					aspect: TextureAspect::All,
+					base_mip_level: 0,
+					mip_level_count: None,
+					base_array_layer: 0,
+					array_layer_count: None,
+				});
+
+				let mut command_encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
+					label: Some("Command Encoder"),
+				});
+
+				let render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor{
+					label: Some("Render pass"),
+					color_attachments: &[
+						Some(RenderPassColorAttachment{
+							view: &texture_view,
+							resolve_target: None,
+							ops: Operations {
+								load: LoadOp::Clear(Color{r: 1., g: 0., b:1., a:1.}),
+								store: StoreOp::Store,
+							}
+						}),
+					],
+					..Default::default()
+				});
+				std::mem::drop(render_pass);
+				context.queue().submit([command_encoder.finish()]);
+				surface_texture.present();
+				
+				println!("{}", "hello");
+			}
+			println!("{}", "thread exiting");
 		}
-		println!("{}", "thread exiting");
 	}
 }
