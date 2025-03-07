@@ -3,6 +3,10 @@ use arc_atomic::AtomicArc;
 use winit::dpi::PhysicalSize;
 use std::sync::Arc;
 
+use bytemuck::Pod;
+
+pub const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
+
 pub struct WGPUContext {
 	#[allow(dead_code)]
 	instance: Instance,

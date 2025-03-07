@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 arc-atomic = "0.1.0"
+bytemuck = "1.22.0"
 log = "0.4.26"
 pollster = "0.4.0"
 simple_logger = "5.0.0"

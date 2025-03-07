@@ -2163,6 +2163,7 @@ name = "wgpu_2d"
 version = "0.1.0"
 dependencies = [
  "arc-atomic",
+ "bytemuck",
  "log",
  "pollster",
  "simple_logger",

@@ -118,14 +118,15 @@ impl winit::application::ApplicationHandler for App {
 }
 
 mod worker_thread {
-	use super::super::wgpu_context::WGPUContext;
+	use super::super::wgpu_context::{WGPUContext, SHADER_DIRECTORY};
 	use wgpu::*;
 	use std::sync::Arc;
 	use std::sync::mpsc::Receiver;
 
+	use super::super::rendering::point::*;
+
 	use std::borrow::Cow;
 
-	const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
 
 	pub fn create_worker_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
 		let shader_path = SHADER_DIRECTORY.to_owned() + "triangle.wgsl";
@@ -194,31 +195,34 @@ mod worker_thread {
 					array_layer_count: None,
 				});
 
-				let mut command_encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
-					label: Some("Command Encoder"),
-				});
+				Point {
+					location: [0.5, 0.],
+					color: [1., 1., 1., 1.],
+				}.render(&*context, &texture_view);
 
-				let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor{
-					label: Some("Render pass"),
-					color_attachments: &[
-						Some(RenderPassColorAttachment{
-							view: &texture_view,
-							resolve_target: None,
-							ops: Operations {
-								load: LoadOp::Clear(Color{r: 1., g: 0., b:1., a:1.}),
-								store: StoreOp::Store,
-							}
-						}),
-					],
-					..Default::default()
-				});
-				render_pass.set_pipeline(&render_pipeline);
-				render_pass.draw(0..4, 0..1);
-				std::mem::drop(render_pass);
-				context.queue().submit([command_encoder.finish()]);
+				// let mut command_encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
+				// 	label: Some("Command Encoder"),
+				// });
+
+				// let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor{
+				// 	label: Some("Render pass"),
+				// 	color_attachments: &[
+				// 		Some(RenderPassColorAttachment{
+				// 			view: &texture_view,
+				// 			resolve_target: None,
+				// 			ops: Operations {
+				// 				load: LoadOp::Clear(Color{r: 1., g: 0., b:1., a:1.}),
+				// 				store: StoreOp::Store,
+				// 			}
+				// 		}),
+				// 	],
+				// 	..Default::default()
+				// });
+				// render_pass.set_pipeline(&render_pipeline);
+				// render_pass.draw(0..4, 0..1);
+				// std::mem::drop(render_pass);
+				// context.queue().submit([command_encoder.finish()]);
 				surface_texture.present();
-				
-				println!("{}", "hello");
 			}
 			println!("{}", "thread exiting");
 		}
