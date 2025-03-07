@@ -1,4 +1,4 @@
-use std::sync::mpsc::{channel, Sender, Receiver, SendError};
+use std::sync::mpsc::{channel, Sender, SendError};
 use std::sync::Arc;
 use std::thread;
 
@@ -12,11 +12,11 @@ use super::input::key_map::KeyMap;
 use winit::keyboard::{Key, NamedKey};
 use winit::event::ElementState;
 
-use worker_thread::create_application_thread;
+use worker_thread::create_worker_thread;
 
 pub struct App{
 	title: &'static str,
-	key_map: Arc<KeyMap>,
+	key_map: KeyMap,
 	inner: Option<AppInner>,
 }
 
@@ -66,7 +66,7 @@ impl winit::application::ApplicationHandler for App {
 					move || {_ = key_map_send.send(());}, 
 				);
 
-				thread::spawn(create_application_thread(rcv, Arc::clone(&render_context)));
+				thread::spawn(create_worker_thread(rcv, Arc::clone(&render_context)));
 				self.inner = Some(AppInner{
 					window,
 					sender,
@@ -75,18 +75,15 @@ impl winit::application::ApplicationHandler for App {
 			}	
 			_ => (),
 		}
-
 	}
 
-	fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+	fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
 		match event {
 			WindowEvent::CloseRequested => {
 				println!("The close button was pressed; stopping");
 				event_loop.exit();
 			},
 			WindowEvent::KeyboardInput{event, ..} => {
-				use winit::keyboard::Key;
-				use winit::keyboard::NamedKey;
 				self.key_map.handle_key(event.logical_key.clone(), event.state);
 				match event.logical_key {
 					Key::Named(NamedKey::Escape) => event_loop.exit(),
@@ -94,6 +91,10 @@ impl winit::application::ApplicationHandler for App {
 					_ => (),
 				}
 			}
+			WindowEvent::Resized(new_size) => {
+				self.render_context().resize(new_size);
+				self.window().request_redraw();
+			},
 			WindowEvent::RedrawRequested => {
 				// Redraw the application.
 				//
@@ -108,6 +109,7 @@ impl winit::application::ApplicationHandler for App {
 				// You only need to call this if you've determined that you need to redraw in
 				// applications which do not always need to. Applications that redraw continuously
 				// can render here instead.
+				self.send().unwrap();
 				self.window().request_redraw();
 			}
 			_ => (),
@@ -125,7 +127,7 @@ mod worker_thread {
 
 	const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
 
-	pub fn create_application_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
+	pub fn create_worker_thread (rcv: Receiver<()>, context: Arc<WGPUContext>) -> impl FnOnce() {
 		let shader_path = SHADER_DIRECTORY.to_owned() + "triangle.wgsl";
 
 		println!("{:?}", shader_path);

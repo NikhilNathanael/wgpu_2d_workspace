@@ -88,11 +88,7 @@ pub mod key_map {
 
 	impl Default for Callbacks {
 		fn default() -> Self {
-			fn empty() {}
-			Self {
-				on_press: Box::new(empty),
-				on_release: Box::new(empty),
-			}
+			Self::empty()
 		}
 	}
 

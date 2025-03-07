@@ -1,12 +1,17 @@
-use wgpu::{Adapter, CompositeAlphaMode, Device, Features, Instance, InstanceFlags, MemoryHints, Queue, Surface, SurfaceConfiguration, TextureUsages};
+use wgpu::*;
+use arc_atomic::AtomicArc;
+use winit::dpi::PhysicalSize;
+use std::sync::Arc;
 
 pub struct WGPUContext {
+	#[allow(dead_code)]
 	instance: Instance,
 	surface: Surface<'static>,
+	#[allow(dead_code)]
 	adapter: Adapter,
 	device: Device,
 	queue: Queue,
-	config: SurfaceConfiguration,
+	config: AtomicArc<SurfaceConfiguration>,
 }
 
 impl WGPUContext {
@@ -63,7 +68,7 @@ impl WGPUContext {
 			adapter,
 			device,
 			queue,
-			config
+			config: AtomicArc::new(Arc::new(config)),
 		}
 	}
 
@@ -79,7 +84,15 @@ impl WGPUContext {
 		&self.queue
 	}
 
-	pub fn config(&self) -> &SurfaceConfiguration {
-		&self.config
+	pub fn config(&self) -> Arc<SurfaceConfiguration> {
+		self.config.load()
+	}
+
+	pub fn resize(&self, new_size: PhysicalSize<u32>) {
+		let mut old_config = self.config.load();
+		let new_config = Arc::make_mut(&mut old_config);
+		new_config.width = new_size.width;
+		new_config.height = new_size.height;
+		self.config.swap(old_config);
 	}
 }
