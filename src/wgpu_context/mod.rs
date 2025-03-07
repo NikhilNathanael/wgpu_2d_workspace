@@ -106,12 +106,7 @@ pub struct VecAndBuffer<T> {
 
 impl<T: Pod> VecAndBuffer<T> {
 	pub fn new(context: &WGPUContext, data: Vec<T>, usage: BufferUsages) -> Self {
-		let buffer = context.device().create_buffer(&BufferDescriptor{
-			label: None,
-			size: std::mem::size_of_val(&*data) as u64,
-			usage: BufferUsages::COPY_DST | usage,
-			mapped_at_creation: true, 
-		});
+		let buffer = create_buffer_with_size(std::mem::size_of_val(&*data) as u64, usage, context);
 		buffer.slice(..)
 			.get_mapped_range_mut()
 			.copy_from_slice(bytemuck::cast_slice(&*data));
@@ -121,4 +116,55 @@ impl<T: Pod> VecAndBuffer<T> {
 			buffer,
 		}
 	}
+
+	pub fn update_buffer(&mut self, context: &WGPUContext) {
+		if self.buffer.size() < std::mem::size_of_val(&*self.data) as u64 {
+			self.buffer = Self::create_buffer_with_size(
+				std::mem::size_of_val(&*self.data) as u64, 
+				self.buffer.usage(), 
+				context
+			);
+		}
+		context.queue().write_buffer(&self.buffer, 0, bytemuck::cast_slice(&*self.data));
+		context.queue().submit([]);
+	}
+}
+
+pub struct DataAndBuffer<T> {
+	pub data: T,
+	pub buffer: Buffer,
+}
+
+
+impl<T: Pod> DataAndBuffer<T> {
+	pub fn new(context: &WGPUContext, data: T, usage: BufferUsages) -> Self {
+		const UNIFORM_BUFFER_ALIGNMENT: u64 = 16;
+		let buffer = create_buffer_with_size(
+			((std::mem::size_of::<T>() as u64 - 1) / UNIFORM_BUFFER_ALIGNMENT + 1) * UNIFORM_BUFFER_ALIGNMENT,
+			usage,
+			context,
+		);
+		buffer.slice(..)
+			.get_mapped_range_mut()
+			.copy_from_slice(bytemuck::bytes_of(&data));
+		buffer.unmap();
+		Self {
+			data,
+			buffer,
+		}
+	}
+
+	pub fn update_buffer(&mut self, context: &WGPUContext) {
+		context.queue().write_buffer(&self.buffer, 0, bytemuck::cast_slice(&*self.data));
+		context.queue().submit([]);
+	}
+}
+
+fn create_buffer_with_size(size: u64, usage: BufferUsages, context: &WGPUContext) -> Buffer {
+	context.device().create_buffer(&BufferDescriptor{
+		label: None,
+		size: size,
+		usage: BufferUsages::COPY_DST | usage,
+		mapped_at_creation: true, 
+	})
 }

@@ -30,16 +30,16 @@ pub mod point {
 			.expect("Could not read shader source")
 	});
 
+	struct PointRenderer {
+		point: Vec<Point>,
+	}
+
 	impl Point {
 		pub fn render(&self, context: &WGPUContext, target: &TextureView) {
 			let shader_module = context.device().create_shader_module(ShaderModuleDescriptor{
 				label: Some("Point shader module"),
 				source: ShaderSource::Wgsl(Cow::Borrowed(&POINT_SHADER_SOURCE)),
 			});
-
-			// let bind_group_layouts = [
-			// 	context.device().create_bind_group_layout(BindGroupLayoutDescriptor
-			// ];
 
 			let render_pipeline = context.device().create_render_pipeline(&RenderPipelineDescriptor{
 				label: Some("Points Render Pipeline"),
