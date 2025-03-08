@@ -13,16 +13,19 @@ pub mod point {
 		pub size: [f32;2],
 	}
 
-	// impl BufferData for Uniform {
-	// 	type Buffers = UniformBuffer;
-	// 	fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-	// 		Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
-	// 	}
-	// 	fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			
-	// 	}
-	// 	fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext) {}
-	// }
+	impl BufferData for Uniform {
+		type Buffers = UniformBuffer;
+		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+			Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
+		}
+		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+			buffers.resize(std::mem::size_of::<Self>() as u64, context);
+			buffers.write_data(bytemuck::bytes_of(self), context);
+		}
+		fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext) {
+			buffers.resize(std::mem::size_of::<Self>() as u64, context);
+		}
+	}
 
 	#[repr(C)]
 	#[derive(Zeroable, Pod, Clone, Copy, Debug)]
@@ -31,14 +34,32 @@ pub mod point {
 		pub position: [f32;2],
 	}
 
+	impl BufferData for Vec<Point> {
+		type Buffers = (VertexBuffer, VertexBuffer);
+		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+			(
+				VertexBuffer::create((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context),
+				VertexBuffer::create((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
+			)
+		}
+		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+			buffers.0.write_iter(self.iter().map(|x| &x.color), context);
+			buffers.1.write_iter(self.iter().map(|x| &x.position), context);
+		}
+		fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext) {
+			buffers.0.resize((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context);
+			buffers.1.resize((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context);
+		}
+	}
+
 	static POINT_SHADER_SOURCE: LazyLock<String> = LazyLock::new(|| {
 		std::fs::read_to_string(SHADER_DIRECTORY.to_owned() + "points.wgsl")
 			.expect("Could not read shader source")
 	});
 
 	pub struct PointRenderer {
-		points: VecAndBuffer<Point>,
-		uniform: DataAndBuffer<Uniform>,
+		points: BufferAndData<Vec<Point>>,
+		uniform: BufferAndData<Uniform>,
 		render_pipeline: RenderPipeline,
 		bind_group: BindGroup,
 	}
@@ -59,9 +80,14 @@ pub mod point {
 					compilation_options: Default::default(),
 					buffers: &[
 						VertexBufferLayout{
-							array_stride: std::mem::size_of::<Point>() as u64,
+							array_stride: std::mem::size_of::<[f32;4]>() as u64,
 							step_mode: VertexStepMode::Vertex,
-							attributes: &vertex_attr_array![0 => Float32x4, 1 => Float32x2],
+							attributes: &vertex_attr_array![0 => Float32x4],
+						},
+						VertexBufferLayout{
+							array_stride: std::mem::size_of::<[f32;2]>() as u64,
+							step_mode: VertexStepMode::Vertex,
+							attributes: &vertex_attr_array![1 => Float32x2],
 						}
 					],
 				},
@@ -90,12 +116,13 @@ pub mod point {
 				cache: None,
 			});
 
-			let points = VecAndBuffer::new(points, BufferUsages::VERTEX, context);
+			let points = BufferAndData::new(points, context);
 
 			let uniform = Uniform {
 				size: [context.config().width as f32, context.config().height as f32],
 			};
-			let uniform = DataAndBuffer::new(uniform, BufferUsages::UNIFORM, context);
+			let uniform = BufferAndData::new(uniform, context);
+			context.queue().submit([]);
 
 			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
 				label: Some("Points Uniform Buffer"),
@@ -103,7 +130,7 @@ pub mod point {
 				entries: &[
 					BindGroupEntry{
 						binding: 0,
-						resource: uniform.buffer.as_entire_binding(),
+						resource: uniform.buffers.as_entire_binding(),
 					}
 				],
 			});
@@ -139,11 +166,12 @@ pub mod point {
 				],
 				..Default::default()
 			});
-			// println!("{:?}", (self.points.buffer.size(), self.points.data.len()));
+			println!("{:?}", (self.points.buffers.0.size(), self.points.data.len()));
 
 			render_pass.set_pipeline(&self.render_pipeline);
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
-			render_pass.set_vertex_buffer(0, self.points.buffer.slice(..));
+			render_pass.set_vertex_buffer(0, self.points.buffers.0.slice(..));
+			render_pass.set_vertex_buffer(1, self.points.buffers.1.slice(..));
 			render_pass.draw(0..(self.points.data.len()) as u32, 0..1);
 			std::mem::drop(render_pass);
 

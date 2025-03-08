@@ -58,11 +58,11 @@ impl WGPUContext {
 
 		device.on_uncaptured_error(Box::new(|error| {
 			match error {
-				wgpu::Error::OutOfMemory{..} => log::error!("Out of memory"),
-				wgpu::Error::Validation{description, ..} => log::error!("Validation Error: {description}"),
-				wgpu::Error::Internal{description, ..} => log::error!("Internal Error: {description}"),
+				wgpu::Error::OutOfMemory{..} => println!("Out of memory"),
+				wgpu::Error::Validation{description, ..} => println!("Validation Error: {description}"),
+				wgpu::Error::Internal{description, ..} => println!("Internal Error: {description}"),
 			}
-			std::process::exit(1);
+			std::process::exit(25);
 		}));
 
 		surface.configure(&device, &config);
@@ -176,6 +176,26 @@ pub trait BufferData {
 	fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext);
 }
 
+pub struct BufferAndData<T: BufferData> {
+	pub data: T,
+	pub buffers: T::Buffers,
+}
+
+impl<T: BufferData> BufferAndData<T> {
+	pub fn new(data: T, context: &WGPUContext) -> Self {
+		let mut buffers = T::create_buffers(&data, context);
+		T::fill_buffers(&data, &mut buffers, context);
+		Self {
+			data,
+			buffers,
+		}
+	}
+
+	pub fn update_buffer(&mut self, context: &WGPUContext) {
+		self.data.fill_buffers(&mut self.buffers, context);
+	}
+}
+
 
 mod buffers {
 	use super::WGPUContext;
@@ -194,9 +214,12 @@ mod buffers {
 	pub trait WGPUBuffer: Sized {
 		fn create(size: u64, context: &WGPUContext) -> Self;
 		fn destroy(&self);
+		fn size(&self) -> u64;
 		fn resize(&mut self, new_size: u64, context: &WGPUContext) {
-			self.destroy();
-			*self = Self::create(new_size, context);
+			if self.size() < new_size {
+				self.destroy();
+				*self = Self::create(new_size, context);
+			}
 		}
 		fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
 			I: Iterator<Item = &'a T> + ExactSizeIterator,
@@ -208,6 +231,19 @@ mod buffers {
 		use super::*;
 		pub struct UniformBuffer {
 			pub buffer: Buffer
+		}
+
+		impl std::ops::Deref for UniformBuffer {
+			type Target = Buffer;
+			fn deref(&self) -> &Self::Target {
+				&self.buffer
+			}
+		}
+		
+		impl std::ops::DerefMut for UniformBuffer {
+			fn deref_mut(&mut self) -> &mut Self::Target {
+				&mut self.buffer
+			}
 		}
 
 		impl UniformBuffer {
@@ -227,6 +263,10 @@ mod buffers {
 		impl WGPUBuffer for UniformBuffer {
 			fn create(size: u64, context: &WGPUContext) -> Self {
 				Self::new(size, context)
+			}
+
+			fn size(&self) -> u64 {
+				self.buffer.size()
 			}
 
 			fn destroy(&self) {self.buffer.destroy();}
@@ -263,6 +303,19 @@ mod buffers {
 			pub buffer: Buffer
 		}
 
+		impl std::ops::Deref for VertexBuffer {
+			type Target = Buffer;
+			fn deref(&self) -> &Self::Target {
+				&self.buffer
+			}
+		}
+		
+		impl std::ops::DerefMut for VertexBuffer {
+			fn deref_mut(&mut self) -> &mut Self::Target {
+				&mut self.buffer
+			}
+		}
+
 		impl VertexBuffer {
 			pub fn new(size: u64, context: &WGPUContext) -> Self {
 				Self {
@@ -281,6 +334,10 @@ mod buffers {
 				Self::new(size, context)
 			}
 
+			fn size(&self) -> u64 {
+				self.buffer.size()
+			}
+
 			fn destroy(&self) {self.buffer.destroy();}
 
 			fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
@@ -292,9 +349,9 @@ mod buffers {
 					.expect("Could nto write to buffer")
 					.chunks_mut(std::mem::size_of::<T>())
 					.zip(data)
-					.for_each(|(buffer_slice, data_elem)| 
+					.for_each(|(buffer_slice, data_elem)| {
 						buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem))
-					);
+					});
 			}
 
 			fn write_data(&self, data: &[u8], context: &WGPUContext) {
@@ -315,6 +372,19 @@ mod buffers {
 			pub buffer: Buffer
 		}
 
+		impl std::ops::Deref for StorageBuffer {
+			type Target = Buffer;
+			fn deref(&self) -> &Self::Target {
+				&self.buffer
+			}
+		}
+		
+		impl std::ops::DerefMut for StorageBuffer {
+			fn deref_mut(&mut self) -> &mut Self::Target {
+				&mut self.buffer
+			}
+		}
+
 		impl StorageBuffer {
 			pub fn new(size: u64, context: &WGPUContext) -> Self {
 				Self {
@@ -331,6 +401,10 @@ mod buffers {
 		impl WGPUBuffer for StorageBuffer {
 			fn create(size: u64, context: &WGPUContext) -> Self {
 				Self::new(size, context)
+			}
+
+			fn size(&self) -> u64 {
+				self.buffer.size()
 			}
 
 			fn destroy(&self) {self.buffer.destroy();}
@@ -367,6 +441,19 @@ mod buffers {
 			pub buffer: Buffer
 		}
 
+		impl std::ops::Deref for IndexBuffer {
+			type Target = Buffer;
+			fn deref(&self) -> &Self::Target {
+				&self.buffer
+			}
+		}
+		
+		impl std::ops::DerefMut for IndexBuffer {
+			fn deref_mut(&mut self) -> &mut Self::Target {
+				&mut self.buffer
+			}
+		}
+
 		impl IndexBuffer {
 			pub fn new(size: u64, context: &WGPUContext) -> Self {
 				Self {
@@ -383,6 +470,10 @@ mod buffers {
 		impl WGPUBuffer for IndexBuffer {
 			fn create(size: u64, context: &WGPUContext) -> Self {
 				Self::new(size, context)
+			}
+
+			fn size(&self) -> u64 {
+				self.buffer.size()
 			}
 
 			fn destroy(&self) {self.buffer.destroy();}
