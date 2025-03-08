@@ -10,8 +10,9 @@ use winit::event::{ElementState, WindowEvent};
 use winit::dpi::PhysicalSize;
 use winit::keyboard::{Key, NamedKey};
 
-use super::wgpu_context::WGPUContext;
+use super::wgpu_context::*;
 use super::input::KeyMap;
+use super::shader_manager::*;
 
 use crate::rendering::{PointRenderer, Point};
 
@@ -25,6 +26,7 @@ struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
 	scene: PointRenderer,
+	shader_manager: ShaderManager,
 }
 
 impl App {
@@ -42,6 +44,8 @@ impl App {
 			Window::default_attributes()
 				.with_title(self.title.to_owned())
 			).expect("Could not create window"));
+		// Create shader_manager
+		let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
 		
 		// Create WGPU context
 		let render_context = WGPUContext::new(Arc::clone(&window));
@@ -54,12 +58,14 @@ impl App {
 				color: [1., 1., 1., 1.],
 			}
 		}).collect::<Vec<_>>();
-		let scene = PointRenderer::new(points, &render_context);
+		let scene = PointRenderer::new(points, &render_context, &shader_manager);
+
 
 		self.inner = Some(AppInner{
 			window,
 			render_context,
 			scene,
+			shader_manager
 		});
 	}
 }
@@ -84,6 +90,7 @@ impl winit::application::ApplicationHandler for App {
 			WindowEvent::KeyboardInput{event, ..} => {
 				match event.logical_key {
 					Key::Named(NamedKey::Escape) => event_loop.exit(),
+					Key::Named(NamedKey::Space) => inner.shader_manager.reload(),
 					x => self.key_map.handle_key(x, event.state),
 				}
 			}
@@ -118,7 +125,7 @@ impl winit::application::ApplicationHandler for App {
 					base_array_layer: 0,
 					array_layer_count: None,
 				});
-				inner.scene.render(&texture_view, &inner.render_context);
+				inner.scene.render(&texture_view, &inner.render_context, &inner.shader_manager);
 				
 				surface_texture.present();
 				inner.window.request_redraw();

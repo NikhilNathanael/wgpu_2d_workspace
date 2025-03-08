@@ -5,6 +5,8 @@ pub mod point {
 	use crate::wgpu_context::*;
 	use wgpu::*;
 
+	use crate::shader_manager::*;
+
 	use bytemuck::{Zeroable, Pod};
 
 	#[repr(C)]
@@ -52,24 +54,37 @@ pub mod point {
 	pub struct PointRenderer {
 		points: BufferAndData<Vec<Point>>,
 		uniform: BufferAndData<Uniform>,
-		render_pipeline: RenderPipeline,
 		bind_group: BindGroup,
 	}
 	
 	impl PointRenderer {
-		pub fn new (points: Vec<Point>, context: &WGPUContext) -> Self {
-			let shader_module = context.device().create_shader_module(ShaderModuleDescriptor{
-				label: Some("Point shader module"),
-				source: ShaderSource::Wgsl(Cow::Borrowed(&POINT_SHADER_SOURCE)),
+		pub fn new (points: Vec<Point>, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
+				label: Some("point renderer bind group layout 1"),
+				entries : &[
+					BindGroupLayoutEntry {
+						binding: 0,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Buffer {
+							ty: BufferBindingType::Uniform,
+							has_dynamic_offset: false,
+							min_binding_size:None
+						},
+						count: None,
+					}
+				],
 			});
-
-			let render_pipeline = context.device().create_render_pipeline(&RenderPipelineDescriptor{
+			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
+				label: Some("Points pipeline layout"),
+				bind_group_layouts: &[&bind_group_layout],
+				push_constant_ranges: &[]
+			});
+			let descriptor_template = RenderPipelineDescriptorTemplate{
 				label: Some("Points Render Pipeline"),
-				layout: None,
-				vertex: VertexState{
-					module: &shader_module,
+				layout: Some(pipeline_layout.clone()),
+				vertex: VertexStateTemplate{
+					module_path: "points.wgsl",
 					entry_point: None,
-					compilation_options: Default::default(),
 					buffers: &[
 						VertexBufferLayout{
 							array_stride: std::mem::size_of::<[f32;4]>() as u64,
@@ -83,17 +98,16 @@ pub mod point {
 						}
 					],
 				},
-				fragment: Some(FragmentState{
-					module: &shader_module,
+				fragment: Some(FragmentStateTemplate{
+					module_path: "points.wgsl",
 					entry_point: None,
-					compilation_options: Default::default(),
-					targets: &[
+					targets: Box::new([
 						Some(ColorTargetState{
 							format: context.config().format,
 							blend: None,
 							write_mask: ColorWrites::ALL,
 						})
-					],
+					]),
 				}),
 				primitive: PrimitiveState {
 					topology: PrimitiveTopology::PointList,
@@ -106,7 +120,8 @@ pub mod point {
 				multisample: Default::default(),
 				multiview: None,
 				cache: None,
-			});
+			};
+			shader_manager.register_render_pipeline("Point Renderer Pipeline", descriptor_template);
 
 			let points = BufferAndData::new(points, context);
 
@@ -118,7 +133,7 @@ pub mod point {
 
 			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
 				label: Some("Points Uniform Buffer"),
-				layout: &render_pipeline.get_bind_group_layout(0),
+				layout: &shader_manager.get_render_pipeline("Point Renderer Pipeline", context).get_bind_group_layout(0),
 				entries: &[
 					BindGroupEntry{
 						binding: 0,
@@ -131,7 +146,6 @@ pub mod point {
 				points,
 				uniform,
 				bind_group,
-				render_pipeline,
 			}
 		}
 
@@ -140,7 +154,7 @@ pub mod point {
 			self.uniform.update_buffer(context);
 		}
 
-		pub fn render(&self, target: &TextureView, context: &WGPUContext) {
+		pub fn render(&self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
 			let mut encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
 				label: Some("Points command encoder"),
 			});
@@ -159,7 +173,7 @@ pub mod point {
 				..Default::default()
 			});
 
-			render_pass.set_pipeline(&self.render_pipeline);
+			render_pass.set_pipeline(shader_manager.get_render_pipeline("Point Renderer Pipeline", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.points.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.points.buffers.1.slice(..));

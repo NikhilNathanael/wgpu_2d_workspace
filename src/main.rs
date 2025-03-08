@@ -1,12 +1,11 @@
 //#![windows_subsystem = "windows"]
 mod rendering;
+mod shader_manager;
+mod wgpu_context;
+mod input;
 
 mod application;
 use application::*;
-
-mod wgpu_context;
-
-mod input;
 
 fn main () {
 	init_logger();
