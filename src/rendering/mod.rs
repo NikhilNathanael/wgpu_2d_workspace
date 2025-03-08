@@ -19,11 +19,7 @@ pub mod point {
 			Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
 		}
 		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.resize(std::mem::size_of::<Self>() as u64, context);
 			buffers.write_data(bytemuck::bytes_of(self), context);
-		}
-		fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext) {
-			buffers.resize(std::mem::size_of::<Self>() as u64, context);
 		}
 	}
 
@@ -45,10 +41,6 @@ pub mod point {
 		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
 			buffers.0.write_iter(self.iter().map(|x| &x.color), context);
 			buffers.1.write_iter(self.iter().map(|x| &x.position), context);
-		}
-		fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext) {
-			buffers.0.resize((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context);
-			buffers.1.resize((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context);
 		}
 	}
 
@@ -166,7 +158,6 @@ pub mod point {
 				],
 				..Default::default()
 			});
-			println!("{:?}", (self.points.buffers.0.size(), self.points.data.len()));
 
 			render_pass.set_pipeline(&self.render_pipeline);
 			render_pass.set_bind_group(0, &self.bind_group, &[]);

@@ -1,11 +1,9 @@
 use wgpu::*;
 use winit::dpi::PhysicalSize;
-use std::sync::Arc;
-
-use bytemuck::Pod;
 
 pub const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
 pub use buffers::*;
+pub use shader_manager::*;
 
 pub struct WGPUContext {
 	#[allow(dead_code)]
@@ -99,81 +97,11 @@ impl WGPUContext {
 	}
 }
 
-pub struct VecAndBuffer<T> {
-	pub data: Vec<T>,
-	pub buffer: Buffer,
-}
-
-impl<T: Pod> VecAndBuffer<T> {
-	pub fn new(data: Vec<T>, usage: BufferUsages, context: &WGPUContext) -> Self {
-		let buffer = create_buffer_with_size(std::mem::size_of_val(&*data) as u64, usage, context);
-		buffer.slice(..)
-			.get_mapped_range_mut()
-			.copy_from_slice(bytemuck::cast_slice(&*data));
-		buffer.unmap();
-		Self {
-			data,
-			buffer,
-		}
-	}
-
-	pub fn update_buffer(&mut self, context: &WGPUContext) {
-		if self.buffer.size() < std::mem::size_of_val(&*self.data) as u64 {
-			self.buffer = create_buffer_with_size(
-				std::mem::size_of_val(&*self.data) as u64, 
-				self.buffer.usage(), 
-				context
-			);
-		}
-		context.queue().write_buffer(&self.buffer, 0, bytemuck::cast_slice(&*self.data));
-		context.queue().submit([]);
-	}
-}
-
-pub struct DataAndBuffer<T> {
-	pub data: T,
-	pub buffer: Buffer,
-}
-
-impl<T: Pod> DataAndBuffer<T> {
-	pub fn new(data: T, usage: BufferUsages, context: &WGPUContext) -> Self {
-		const UNIFORM_BUFFER_ALIGNMENT: u64 = 16;
-		let buffer = create_buffer_with_size(
-			((std::mem::size_of::<T>() as u64 - 1) / UNIFORM_BUFFER_ALIGNMENT + 1) * UNIFORM_BUFFER_ALIGNMENT,
-			usage,
-			context,
-		);
-		buffer.slice(..(std::mem::size_of::<T>() as u64))
-			.get_mapped_range_mut()
-			.copy_from_slice(bytemuck::bytes_of(&data));
-		buffer.unmap();
-		Self {
-			data,
-			buffer,
-		}
-	}
-
-	pub fn update_buffer(&mut self, context: &WGPUContext) {
-		context.queue().write_buffer(&self.buffer, 0, bytemuck::bytes_of(&self.data));
-		context.queue().submit([]);
-	}
-}
-
-fn create_buffer_with_size(size: u64, usage: BufferUsages, context: &WGPUContext) -> Buffer {
-	context.device().create_buffer(&BufferDescriptor{
-		label: None,
-		size: size,
-		usage: BufferUsages::COPY_DST | usage,
-		mapped_at_creation: true, 
-	})
-}
-
 pub trait BufferData {
 	// If a type requires filling multiple buffers, this should a tuple of compatible buffers
 	type Buffers;
 	fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers;
 	fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext);
-	fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext);
 }
 
 pub struct BufferAndData<T: BufferData> {
@@ -195,7 +123,6 @@ impl<T: BufferData> BufferAndData<T> {
 		self.data.fill_buffers(&mut self.buffers, context);
 	}
 }
-
 
 mod buffers {
 	use super::WGPUContext;
@@ -505,13 +432,177 @@ mod buffers {
 	}
 }
 
-// TODO: Create trait that describes type which can be put into a GPU buffer
-//
-// Implement this trait for any uniform variables directly and implement it 
-// on slices or Vecs of vertex and storage data
-//
-// Question: 
-// 	Should there be separate types which represent Uniform, vertex, index and storage buffers, 
-// 	or should you just create them with the required usage manually?
-// 	What about textures?
+mod shader_manager {
+	use wgpu::*;
+	use std::collections::HashMap;
+	use super::WGPUContext;
 
+	use std::borrow::Cow;
+	use std::sync::Mutex;
+	use std::num::NonZeroU32;
+
+	pub struct ShaderManager {
+		directory_path: &'static str,
+		shader_modules: Mutex<HashMap<&'static str, Box<ShaderModule>>>,
+		render_pipelines: Mutex<HashMap<&'static str, (RenderPipelineDescriptorTemplate, Option<Box<RenderPipeline>>)>>,
+	}
+	// SAFETY:
+	// shared methods MUST NOT allow any element to be removed (Added is fine)
+	//
+	// get_module<'a>(&'a self, ...) -> &'a ShaderModule; // even if this needs to modify the map
+	// reset_modules(&mut self)
+	//
+
+	impl ShaderManager {
+		pub fn new(directory_path: &'static str) -> Self {
+			Self {
+				directory_path,
+				shader_modules: Mutex::new(HashMap::new()),
+				render_pipelines: Mutex::new(HashMap::new()),
+			}
+		}
+
+		fn read_and_get_module(&self, path: &'static str, context: &WGPUContext) -> ShaderModule {
+			let file = Cow::Owned(std::fs::read_to_string(self.directory_path.to_owned() + path)
+				.expect("Could not read shader file"));
+			context.device().create_shader_module(ShaderModuleDescriptor{
+				label: Some(path),
+				source: ShaderSource::Wgsl(file),
+			})
+		}
+
+		pub fn get_module<'a>(&'a self, path: &'static str, context: &WGPUContext) -> &'a ShaderModule {
+			// SAFETY: The only thing that can invalidate the lifetime of the returned reference 
+			// is if the backing Box is deallocated (moving a box does not invalidate
+			//
+			// The returned reference's lifetime is tied to the shared borrow of self and we do not
+			// allow any operations with a shared reference to self to drop or remove any element 
+			// from the map
+			unsafe {&*(&**self.shader_modules.lock().unwrap()
+				.entry(path)
+				// putting a new module into the map could invalidate old references 
+				// but we ensure that this is never done to an existing module
+				.or_insert(Box::new(self.read_and_get_module(path, context)))
+				// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
+				as *const ShaderModule)
+			}
+		}
+
+		fn compile_pipeline(&self, template: &RenderPipelineDescriptorTemplate, context: &WGPUContext) -> RenderPipeline {
+			let paths = template.get_module_paths();
+			let modules = (
+				self.get_module(paths.0, context),
+				paths.1.map(|x| self.get_module(x, context))
+			);
+			let descriptor: RenderPipelineDescriptor = template.resolve(modules.0, modules.1);
+			
+			context.device().create_render_pipeline(&descriptor)
+		}
+
+		pub fn get_render_pipeline<'a>(&'a self, label: &'static str, context: &WGPUContext) -> &'a RenderPipeline {
+			(match self.render_pipelines.lock().unwrap()
+				.get_mut(label)
+				.expect("Tried to access a render pipeline that wasn't registered")
+				{
+					// SAFETY: The only thing that can invalidate the lifetime of the returned reference 
+					// is if the backing Box is deallocated (moving a box does not invalidate
+					//
+					// The returned reference's lifetime is tied to the shared borrow of self and we do not
+					// allow any operations with a shared reference to self to drop or remove an element 
+					// from the map
+					(template, x) => unsafe{&*(
+						// putting a new pipeline into the map could invalidate old references, 
+						// but we ensure that this is only done if there wasn't already a pipeline there
+						&**x.get_or_insert_with(
+							|| Box::new(self.compile_pipeline(template, context))
+
+						// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
+						) as *const RenderPipeline
+					)},
+			})
+		}
+	}
+
+	pub struct RenderPipelineDescriptorTemplate {
+		pub label: Label<'static>,
+		pub layout: Option<&'static PipelineLayout>,
+		pub vertex: VertexStateTemplate,
+		pub primitive: PrimitiveState,
+		pub depth_stencil: Option<DepthStencilState>,
+		pub multisample: MultisampleState,
+		pub fragment: Option<FragmentStateTemplate>,
+		pub multiview: Option<NonZeroU32>,
+		pub cache: Option<&'static PipelineCache>,
+	}
+
+	impl RenderPipelineDescriptorTemplate {
+		fn resolve<'a> (
+			&self, 
+			v_module: &'a ShaderModule, 
+			f_module: Option<&'a ShaderModule>
+		) -> RenderPipelineDescriptor<'a> {
+			RenderPipelineDescriptor {
+				label: self.label,
+				layout: self.layout,
+				vertex: self.vertex.resolve(v_module),
+				primitive: self.primitive,
+				depth_stencil: self.depth_stencil.clone(),
+				multisample: self.multisample,
+				fragment: self.fragment.as_ref().map(|x| x.resolve(f_module.unwrap())),
+				multiview: self.multiview,
+				cache: self.cache,
+			}
+		}
+
+		fn get_module_paths(&self) -> (&'static str, Option<&'static str>) {
+			(
+				self.vertex.get_module_path(),
+				self.fragment.as_ref().map(|x| x.get_module_path()),
+			)
+		}
+	}
+
+	pub struct VertexStateTemplate {
+		pub module_path: &'static str,
+		pub entry_point: Option<&'static str>,
+		pub compilation_options: PipelineCompilationOptions<'static>,
+		pub buffers: &'static [VertexBufferLayout<'static>],
+	}
+
+	impl VertexStateTemplate {
+		fn resolve<'a>(&self, module: &'a ShaderModule) -> VertexState<'a> {
+			VertexState {
+				module,
+				entry_point: self.entry_point,
+				compilation_options: self.compilation_options.clone(),
+				buffers: self.buffers,
+			}
+		}
+
+		fn get_module_path(&self) -> &'static str {
+			self.module_path
+		}
+	}
+
+	pub struct FragmentStateTemplate {
+		pub module_path: &'static str,
+		pub entry_point: Option<&'static str>,
+		pub compilation_options: PipelineCompilationOptions<'static>,
+		pub targets: &'static [Option<ColorTargetState>],
+	}
+
+	impl FragmentStateTemplate {
+		fn resolve<'a>(&self, module: &'a ShaderModule) -> FragmentState<'a> {
+			FragmentState {
+				module,
+				entry_point: self.entry_point,
+				compilation_options: self.compilation_options.clone(),
+				targets: self.targets,
+			}
+		}
+
+		fn get_module_path(&self) -> &'static str {
+			self.module_path
+		}
+	}
+}

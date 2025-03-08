@@ -35,17 +35,32 @@ impl App {
 			inner: None,
 		}
 	}
+	
+	pub fn init_inner(&mut self, event_loop: &ActiveEventLoop) {
+		// Create window
+		let window = Arc::new(event_loop.create_window(
+			Window::default_attributes()
+				.with_title(self.title.to_owned())
+			).expect("Could not create window"));
+		
+		// Create WGPU context
+		let render_context = WGPUContext::new(Arc::clone(&window));
 
-	pub fn window(&self) -> &winit::window::Window {
-		&*self.inner.as_ref().unwrap().window
-	}
+		// Create scene
+		let points = (0..200).map(|i| {
+			let angle = i as f32 * 2. * std::f32::consts::PI / 200.;
+			Point{
+				position: [angle.cos() * 100. + 400., angle.sin() * 100. + 400.],
+				color: [1., 1., 1., 1.],
+			}
+		}).collect::<Vec<_>>();
+		let scene = PointRenderer::new(points, &render_context);
 
-	pub fn render_context (&self) -> &WGPUContext {
-		&self.inner.as_ref().unwrap().render_context
-	}
-
-	pub fn render_context_mut(&mut self) -> &mut WGPUContext {
-		&mut self.inner.as_mut().unwrap().render_context
+		self.inner = Some(AppInner{
+			window,
+			render_context,
+			scene,
+		});
 	}
 }
 
@@ -53,31 +68,14 @@ impl winit::application::ApplicationHandler for App {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
 		match &self.inner {
 			None => {
-				let window = Arc::new(event_loop.create_window(
-					Window::default_attributes()
-						.with_title(self.title.to_owned())
-					).expect("Could not create window"));
-				let render_context = WGPUContext::new(Arc::clone(&window));
-
-				let points = (0..200).map(|i| {
-					let angle = i as f32 * 2. * std::f32::consts::PI / 200.;
-					Point{
-						position: [angle.cos() * 100. + 400., angle.sin() * 100. + 400.],
-						color: [1., 1., 1., 1.],
-					}
-				}).collect::<Vec<_>>();
-				let scene = PointRenderer::new(points, &render_context);
-				self.inner = Some(AppInner{
-					window,
-					render_context,
-					scene,
-				});
+				self.init_inner(event_loop);
 			}	
 			_ => (),
 		}
 	}
 
 	fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+		let inner = self.inner.as_mut().unwrap();
 		match event {
 			WindowEvent::CloseRequested => {
 				println!("The close button was pressed; stopping");
@@ -90,8 +88,8 @@ impl winit::application::ApplicationHandler for App {
 				}
 			}
 			WindowEvent::Resized(new_size) => {
-				self.render_context_mut().resize(new_size);
-				self.window().request_redraw();
+				inner.render_context.resize(new_size);
+				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
 				// Redraw the application.
@@ -107,7 +105,7 @@ impl winit::application::ApplicationHandler for App {
 				// You only need to call this if you've determined that you need to redraw in
 				// applications which do not always need to. Applications that redraw continuously
 				// can render here instead.
-				let surface_texture = self.render_context().surface().get_current_texture()
+				let surface_texture = inner.render_context.surface().get_current_texture()
 					.expect("Could not get current texture");
 				let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor{
 					label: Some("Render Texture"),
@@ -120,12 +118,10 @@ impl winit::application::ApplicationHandler for App {
 					base_array_layer: 0,
 					array_layer_count: None,
 				});
-				self.inner.as_ref().unwrap().scene.render(&texture_view, self.render_context());
+				inner.scene.render(&texture_view, &inner.render_context);
 				
 				surface_texture.present();
-
-
-				self.window().request_redraw();
+				inner.window.request_redraw();
 			}
 			_ => (),
 		}
