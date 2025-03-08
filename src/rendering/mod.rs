@@ -2,16 +2,27 @@ pub mod point {
 	use std::sync::LazyLock;
 	use std::borrow::Cow;
 
-	use crate::wgpu_context::{WGPUContext, SHADER_DIRECTORY, VecAndBuffer, DataAndBuffer};
+	use crate::wgpu_context::*;
 	use wgpu::*;
 
 	use bytemuck::{Zeroable, Pod};
 
 	#[repr(C)]
 	#[derive(Zeroable, Pod, Clone, Copy)]
-	pub struct Uniform{
+	pub struct Uniform {
 		pub size: [f32;2],
 	}
+
+	// impl BufferData for Uniform {
+	// 	type Buffers = UniformBuffer;
+	// 	fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+	// 		Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
+	// 	}
+	// 	fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+			
+	// 	}
+	// 	fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext) {}
+	// }
 
 	#[repr(C)]
 	#[derive(Zeroable, Pod, Clone, Copy, Debug)]
@@ -139,7 +150,6 @@ pub mod point {
 			context.queue().submit([encoder.finish()]);
 		}
 	}
-
 }
 
 pub mod triangle {
@@ -147,6 +157,8 @@ pub mod triangle {
 
 	}
 }
+
+pub use point::*;
 
 use super::wgpu_context::WGPUContext;
 

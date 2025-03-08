@@ -11,11 +11,9 @@ use winit::dpi::PhysicalSize;
 use winit::keyboard::{Key, NamedKey};
 
 use super::wgpu_context::WGPUContext;
-use super::input::key_map::KeyMap;
+use super::input::KeyMap;
 
-use crate::rendering::point::{PointRenderer, Point};
-
-
+use crate::rendering::{PointRenderer, Point};
 
 pub struct App{
 	title: &'static str,
@@ -60,7 +58,6 @@ impl winit::application::ApplicationHandler for App {
 						.with_title(self.title.to_owned())
 					).expect("Could not create window"));
 				let render_context = WGPUContext::new(Arc::clone(&window));
-				let key_map = KeyMap::new();
 
 				let points = (0..200).map(|i| {
 					let angle = i as f32 * 2. * std::f32::consts::PI / 200.;

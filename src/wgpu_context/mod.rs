@@ -5,6 +5,7 @@ use std::sync::Arc;
 use bytemuck::Pod;
 
 pub const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
+pub use buffers::*;
 
 pub struct WGPUContext {
 	#[allow(dead_code)]
@@ -134,7 +135,6 @@ pub struct DataAndBuffer<T> {
 	pub buffer: Buffer,
 }
 
-
 impl<T: Pod> DataAndBuffer<T> {
 	pub fn new(data: T, usage: BufferUsages, context: &WGPUContext) -> Self {
 		const UNIFORM_BUFFER_ALIGNMENT: u64 = 16;
@@ -167,3 +167,260 @@ fn create_buffer_with_size(size: u64, usage: BufferUsages, context: &WGPUContext
 		mapped_at_creation: true, 
 	})
 }
+
+pub trait BufferData {
+	// If a type requires filling multiple buffers, this should a tuple of compatible buffers
+	type Buffers;
+	fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers;
+	fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext);
+	fn resize_buffers(&self, buffers: &mut Self::Buffers, context:&WGPUContext);
+}
+
+
+mod buffers {
+	use super::WGPUContext;
+
+	use wgpu::*;
+
+	use bytemuck::Pod;
+
+	use std::num::NonZero;
+
+	pub use uniform_buffer::*;
+	pub use vertex_buffer::*;
+	pub use storage_buffer::*;
+	pub use index_buffer::*;
+
+	pub trait WGPUBuffer: Sized {
+		fn create(size: u64, context: &WGPUContext) -> Self;
+		fn destroy(&self);
+		fn resize(&mut self, new_size: u64, context: &WGPUContext) {
+			self.destroy();
+			*self = Self::create(new_size, context);
+		}
+		fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
+			I: Iterator<Item = &'a T> + ExactSizeIterator,
+			T: Pod + Sized;
+		fn write_data(&self, data: &[u8], context: &WGPUContext);
+	}
+
+	mod uniform_buffer {
+		use super::*;
+		pub struct UniformBuffer {
+			pub buffer: Buffer
+		}
+
+		impl UniformBuffer {
+			pub fn new(size: u64, context: &WGPUContext) -> Self {
+				const UNIFORM_BUFFER_ALIGNMENT: u64 = 16;
+				Self {
+					buffer: context.device().create_buffer(&BufferDescriptor{
+						label: Some("Uniform Buffer"),
+						size: ((size - 1) / UNIFORM_BUFFER_ALIGNMENT + 1) * UNIFORM_BUFFER_ALIGNMENT,
+						usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
+						mapped_at_creation: false,
+					})
+				}
+			}
+		}
+
+		impl WGPUBuffer for UniformBuffer {
+			fn create(size: u64, context: &WGPUContext) -> Self {
+				Self::new(size, context)
+			}
+
+			fn destroy(&self) {self.buffer.destroy();}
+
+			fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
+				I: Iterator<Item = &'a T> + ExactSizeIterator,
+				T: Pod + Sized 
+			{
+				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
+				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
+					.expect("Could nto write to buffer")
+					.chunks_mut(std::mem::size_of::<T>())
+					.zip(data)
+					.for_each(|(buffer_slice, data_elem)| 
+						buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem))
+					);
+			}
+
+			fn write_data(&self, data: &[u8], context: &WGPUContext) {
+				context.queue().write_buffer(&self.buffer, 0, data);
+			}
+		}
+
+		impl Drop for UniformBuffer {
+			fn drop(&mut self) {
+				self.buffer.destroy();
+			}
+		}
+	}
+
+	mod vertex_buffer {
+		use super::*;
+		pub struct VertexBuffer {
+			pub buffer: Buffer
+		}
+
+		impl VertexBuffer {
+			pub fn new(size: u64, context: &WGPUContext) -> Self {
+				Self {
+					buffer: context.device().create_buffer(&BufferDescriptor{
+						label: Some("Vertex Buffer"),
+						size,
+						usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
+						mapped_at_creation: false,
+					})
+				}
+			}
+		}
+
+		impl WGPUBuffer for VertexBuffer {
+			fn create(size: u64, context: &WGPUContext) -> Self {
+				Self::new(size, context)
+			}
+
+			fn destroy(&self) {self.buffer.destroy();}
+
+			fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
+				I: Iterator<Item = &'a T> + ExactSizeIterator,
+				T: Pod + Sized 
+			{
+				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
+				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
+					.expect("Could nto write to buffer")
+					.chunks_mut(std::mem::size_of::<T>())
+					.zip(data)
+					.for_each(|(buffer_slice, data_elem)| 
+						buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem))
+					);
+			}
+
+			fn write_data(&self, data: &[u8], context: &WGPUContext) {
+				context.queue().write_buffer(&self.buffer, 0, data);
+			}
+		}
+
+		impl Drop for VertexBuffer {
+			fn drop(&mut self) {
+				self.buffer.destroy();
+			}
+		}
+	}
+
+	mod storage_buffer {
+		use super::*;
+		pub struct StorageBuffer {
+			pub buffer: Buffer
+		}
+
+		impl StorageBuffer {
+			pub fn new(size: u64, context: &WGPUContext) -> Self {
+				Self {
+					buffer: context.device().create_buffer(&BufferDescriptor{
+						label: Some("Storage Buffer"),
+						size,
+						usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
+						mapped_at_creation: false,
+					})
+				}
+			}
+		}
+
+		impl WGPUBuffer for StorageBuffer {
+			fn create(size: u64, context: &WGPUContext) -> Self {
+				Self::new(size, context)
+			}
+
+			fn destroy(&self) {self.buffer.destroy();}
+
+			fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
+				I: Iterator<Item = &'a T> + ExactSizeIterator,
+				T: Pod + Sized 
+			{
+				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
+				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
+					.expect("Could nto write to buffer")
+					.chunks_mut(std::mem::size_of::<T>())
+					.zip(data)
+					.for_each(|(buffer_slice, data_elem)| 
+						buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem))
+					);
+			}
+
+			fn write_data(&self, data: &[u8], context: &WGPUContext) {
+				context.queue().write_buffer(&self.buffer, 0, data);
+			}
+		}
+
+		impl Drop for StorageBuffer {
+			fn drop(&mut self) {
+				self.buffer.destroy();
+			}
+		}
+	}
+
+	mod index_buffer {
+		use super::*;
+		pub struct IndexBuffer {
+			pub buffer: Buffer
+		}
+
+		impl IndexBuffer {
+			pub fn new(size: u64, context: &WGPUContext) -> Self {
+				Self {
+					buffer: context.device().create_buffer(&BufferDescriptor{
+						label: Some("Index Buffer"),
+						size,
+						usage: BufferUsages::COPY_DST | BufferUsages::INDEX,
+						mapped_at_creation: false,
+					})
+				}
+			}
+		}
+
+		impl WGPUBuffer for IndexBuffer {
+			fn create(size: u64, context: &WGPUContext) -> Self {
+				Self::new(size, context)
+			}
+
+			fn destroy(&self) {self.buffer.destroy();}
+
+			fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
+				I: Iterator<Item = &'a T> + ExactSizeIterator,
+				T: Pod + Sized 
+			{
+				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
+				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
+					.expect("Could nto write to buffer")
+					.chunks_mut(std::mem::size_of::<T>())
+					.zip(data)
+					.for_each(|(buffer_slice, data_elem)| 
+						buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem))
+					);
+			}
+
+			fn write_data(&self, data: &[u8], context: &WGPUContext) {
+				context.queue().write_buffer(&self.buffer, 0, data);
+			}
+		}
+
+		impl Drop for IndexBuffer {
+			fn drop(&mut self) {
+				self.buffer.destroy();
+			}
+		}
+	}
+}
+
+// TODO: Create trait that describes type which can be put into a GPU buffer
+//
+// Implement this trait for any uniform variables directly and implement it 
+// on slices or Vecs of vertex and storage data
+//
+// Question: 
+// 	Should there be separate types which represent Uniform, vertex, index and storage buffers, 
+// 	or should you just create them with the required usage manually?
+// 	What about textures?
+
