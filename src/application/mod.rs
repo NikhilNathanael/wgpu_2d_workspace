@@ -14,7 +14,7 @@ use super::wgpu_context::*;
 use super::input::KeyMap;
 use super::shader_manager::*;
 
-use crate::rendering::{PointRenderer, Point};
+use crate::rendering::{PointRenderer, Point, create_circle_point_list};
 
 pub struct App{
 	title: &'static str,
@@ -25,7 +25,7 @@ pub struct App{
 struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
-	scene: PointRenderer,
+	scene: Vec<PointRenderer>,
 	shader_manager: ShaderManager,
 }
 
@@ -50,15 +50,12 @@ impl App {
 		// Create WGPU context
 		let render_context = WGPUContext::new(Arc::clone(&window));
 
+
 		// Create scene
-		let points = (0..200).map(|i| {
-			let angle = i as f32 * 2. * std::f32::consts::PI / 200.;
-			Point{
-				position: [angle.cos() * 100. + 400., angle.sin() * 100. + 400.],
-				color: [1., 1., 1., 1.],
-			}
+		let scene = (0..10).map(|i| {
+			let points = create_circle_point_list(200, 50.,[50. * i as f32, 400.]);
+			PointRenderer::new(points, &render_context, &shader_manager)
 		}).collect::<Vec<_>>();
-		let scene = PointRenderer::new(points, &render_context, &shader_manager);
 
 
 		self.inner = Some(AppInner{
@@ -125,7 +122,7 @@ impl winit::application::ApplicationHandler for App {
 					base_array_layer: 0,
 					array_layer_count: None,
 				});
-				inner.scene.render(&texture_view, &inner.render_context, &inner.shader_manager);
+				inner.scene.iter().for_each(|x| x.render(&texture_view, &inner.render_context, &inner.shader_manager));
 				
 				surface_texture.present();
 				inner.window.request_redraw();

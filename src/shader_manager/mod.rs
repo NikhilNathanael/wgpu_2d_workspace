@@ -112,8 +112,8 @@ impl ShaderManager {
 			// we only have shared access to self here so there may be borrows into 
 			// any existing pipeline here.
 			// we must take care not to remove any existing render pipelines
-			Entry::Occupied(x) if x.get().0 == template => (),
-			Entry::Occupied(_) => panic!("A pipeline has already been registered with the same label but different template"),
+			Entry::Occupied(x) => (),
+
 			// this insertion is fine because there is not render pipeline to 
 			// invalidate here
 			Entry::Vacant(x) => {x.insert((template, None));},

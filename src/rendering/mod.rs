@@ -79,6 +79,7 @@ pub mod point {
 				bind_group_layouts: &[&bind_group_layout],
 				push_constant_ranges: &[]
 			});
+
 			let descriptor_template = RenderPipelineDescriptorTemplate{
 				label: Some("Points Render Pipeline"),
 				layout: Some(pipeline_layout.clone()),
@@ -165,7 +166,7 @@ pub mod point {
 						view: target,
 						resolve_target: None,
 						ops: Operations {
-							load: LoadOp::Clear(Color{r:0., g:0., b:0., a:1.}),
+							load: LoadOp::Load,
 							store: StoreOp::Store,
 						}
 					}),
@@ -182,6 +183,16 @@ pub mod point {
 
 			context.queue().submit([encoder.finish()]);
 		}
+	}
+
+	pub fn create_circle_point_list (num_points: usize, radius: f32, center_position: [f32;2]) -> Vec<Point> {
+		(0..num_points).map(|i| {
+			let angle = i as f32 * 2. * std::f32::consts::PI / num_points as f32;
+			Point{
+				position: [angle.cos() * radius + center_position[0], angle.sin() * radius + center_position[1]],
+				color: [1., 1., 1., 1.],
+			}
+		}).collect::<Vec<_>>()
 	}
 }
 
