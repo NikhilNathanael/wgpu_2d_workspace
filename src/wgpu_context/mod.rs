@@ -94,6 +94,12 @@ impl WGPUContext {
 		self.config.height = new_size.height;
 		self.surface.configure(&self.device, &self.config);
 	}
+
+	pub fn get_encoder(&self) -> CommandEncoder {
+		self.device.create_command_encoder(&CommandEncoderDescriptor{
+			label: None,
+		})
+	}
 }
 
 pub trait BufferData {
@@ -202,21 +208,24 @@ mod buffers {
 
 		pub fn destroy(&self) {self.buffer.destroy();}
 
-		pub fn write_iter<'a, I, T>(&self, data: I, context: &WGPUContext) where 
-			I: Iterator<Item = &'a T> + ExactSizeIterator,
+		pub fn write_iter<'a, I, T>(&mut self, mut data: I, context: &WGPUContext) where 
+			I: Iterator<Item = &'a T>,
 			T: Pod + Sized 
 		{
-			let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
-			context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
-				.expect("Could not write to buffer")
-				.chunks_mut(std::mem::size_of::<T>())
-				.zip(data)
-				.for_each(|(buffer_slice, data_elem)| 
-					buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem))
-				);
+			let mut buffer_slice = context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(self.size()).unwrap())
+				.expect("Could not write to buffer");
+			let mut buffer_iter = buffer_slice.chunks_mut(std::mem::size_of::<T>());
+			loop {
+				match (buffer_iter.next(), data.next()) {
+					(Some(buffer_slice), Some(data_elem)) => buffer_slice.copy_from_slice(bytemuck::bytes_of(data_elem)),
+					(_, None) => break,
+					_ => panic!("Size of data is greater than size of buffer"),
+				}
+			}
 		}
 
-		pub fn write_data(&self, data: &[u8], context: &WGPUContext) {
+		pub fn write_data(&mut self, data: &[u8], context: &WGPUContext) {
+			self.resize(data.len() as u64, context);
 			context.queue().write_buffer(&self.buffer, 0, data);
 		}
 	}

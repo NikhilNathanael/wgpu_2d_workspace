@@ -10,14 +10,12 @@ struct V2F {
 
 struct Uniform {
 	size: vec2<f32>,
-	time: f32,
 }
 
 @group(0) @binding(0) var<uniform> uni: Uniform;
 
 @vertex
 fn v_main(point: Point) -> V2F {
-	let position_time = (point.position + vec2<f32>(uni.time * 500., 0.)) % (uni.size * 2);
 	let clip_space = point.position / (uni.size) * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
 
 	var output: V2F;
