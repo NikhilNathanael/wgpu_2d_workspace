@@ -218,7 +218,7 @@ mod buffers {
 
 		impl Drop for UniformBuffer {
 			fn drop(&mut self) {
-				self.buffer.destroy();
+				self.destroy();
 			}
 		}
 	}

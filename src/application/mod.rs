@@ -93,6 +93,7 @@ impl winit::application::ApplicationHandler for App {
 			}
 			WindowEvent::Resized(new_size) => {
 				inner.render_context.resize(new_size);
+				inner.scene.iter_mut().for_each(|x| x.update_uniform(&inner.render_context));
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {

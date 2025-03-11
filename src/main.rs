@@ -3,6 +3,7 @@ mod rendering;
 mod shader_manager;
 mod wgpu_context;
 mod input;
+mod timer;
 
 mod application;
 use application::*;
@@ -27,8 +28,8 @@ fn init_logger() {
 // TODO: Timer struct
 // 		- total time since start
 // 		- time since last reset (usually last frame)
-// 		- integer based
-// TODO: Shader Compilation Manager
+// 		- integer based (No floating point precision issues)
+// TODO (Finished) : Shader Compilation Manager
 // 		- Automatically reads and compiles shaders in shader directory
 // 		- Hot-reloading
 // 		- caches pipelines as well as modules
