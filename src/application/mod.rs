@@ -155,6 +155,11 @@ impl AppInner {
 			});
 			self.scene.0.update_points_buffer(&self.render_context);
 		};
+
+		self.scene.2.rects_mut().iter_mut().for_each(|Rect{rotation, ..}| {
+			*rotation += delta;
+		});
+		self.scene.2.update_rects(&self.render_context);
 	}
 }
 

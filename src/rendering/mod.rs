@@ -541,6 +541,14 @@ pub mod rect {
 			std::mem::drop(render_pass);
 			context.queue().submit([encoder.finish()]);
 		}
+
+		pub fn rects_mut(&mut self) -> &mut Vec<Rect> {
+			&mut self.rectangles.data
+		}
+
+		pub fn update_rects(&mut self, context: &WGPUContext) {
+			self.rectangles.update_buffer(context);
+		}
 	}
 }
 
