@@ -13,6 +13,7 @@ pub mod point {
 	#[derive(Zeroable, Pod, Clone, Copy)]
 	pub struct Uniform {
 		pub size: [f32;2],
+		pub time: f32,
 	}
 
 	impl BufferData for Uniform {
@@ -128,6 +129,7 @@ pub mod point {
 
 			let uniform = Uniform {
 				size: [context.config().width as f32, context.config().height as f32],
+				time: 0.
 			};
 			let uniform = BufferAndData::new(uniform, context);
 			context.queue().submit([]);
@@ -150,12 +152,16 @@ pub mod point {
 			}
 		}
 
-		pub fn update_uniform(&mut self, context: &WGPUContext) {
+		pub fn update_size(&mut self, context: &WGPUContext) {
 			self.uniform.data.size = [context.config().width as f32, context.config().height as f32];
-			self.uniform.update_buffer(context);
 		}
 
-		pub fn render(&self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
+		pub fn update_time(&mut self, time: f32) {
+			self.uniform.data.time = time;
+		}
+
+		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
+			self.uniform.update_buffer(context);
 			let mut encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
 				label: Some("Points command encoder"),
 			});
@@ -183,6 +189,14 @@ pub mod point {
 
 			context.queue().submit([encoder.finish()]);
 		}
+
+		pub fn points_mut(&mut self) -> &mut Vec<Point> {
+			&mut self.points.data
+		}
+
+		pub fn update_points_buffer(&mut self, context: &WGPUContext) {
+			self.points.update_buffer(context);
+		}
 	}
 
 	pub fn create_circle_point_list (num_points: usize, radius: f32, center_position: [f32;2]) -> Vec<Point> {
@@ -198,7 +212,7 @@ pub mod point {
 
 pub mod triangle {
 	struct Triangle {
-
+		
 	}
 }
 

@@ -15,18 +15,14 @@ use super::input::KeyMap;
 use super::shader_manager::*;
 
 use crate::rendering::{PointRenderer, Point, create_circle_point_list};
+use crate::timer::Timer;
+
+use rand::Rng;
 
 pub struct App{
 	title: &'static str,
 	key_map: KeyMap,
 	inner: Option<AppInner>,
-}
-
-struct AppInner {
-	window: Arc<Window>,
-	render_context: WGPUContext,
-	scene: Vec<PointRenderer>,
-	shader_manager: ShaderManager,
 }
 
 impl App {
@@ -44,26 +40,74 @@ impl App {
 			Window::default_attributes()
 				.with_title(self.title.to_owned())
 			).expect("Could not create window"));
+
 		// Create shader_manager
 		let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
 		
 		// Create WGPU context
 		let render_context = WGPUContext::new(Arc::clone(&window));
-
+		
+		// Create Timer
+		let timer = Timer::new();
 
 		// Create scene
-		let scene = (0..10).map(|i| {
-			let points = create_circle_point_list(200, 50.,[50. * i as f32, 400.]);
-			PointRenderer::new(points, &render_context, &shader_manager)
-		}).collect::<Vec<_>>();
-
+		let points = create_circle_point_list(200, 50.,[50. , 400.]);
+		let scene = PointRenderer::new(points, &render_context, &shader_manager);
 
 		self.inner = Some(AppInner{
 			window,
 			render_context,
 			scene,
-			shader_manager
+			shader_manager,
+			timer,
 		});
+	}
+}
+
+struct AppInner {
+	window: Arc<Window>,
+	render_context: WGPUContext,
+	scene: PointRenderer,
+	shader_manager: ShaderManager,
+	timer: Timer,
+}
+
+impl AppInner {
+	pub fn render_frame(&mut self) {
+		let time = self.timer.elapsed_start();
+		let delta = self.timer.elapsed_reset();
+		log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
+		self.timer.reset();
+
+		let surface_texture = self.render_context.surface().get_current_texture()
+			.expect("Could not get current texture");
+
+		let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor{
+			label: Some("Render Texture"),
+			format: Some(surface_texture.texture.format()),
+			dimension: Some(TextureViewDimension::D2),
+			usage: Some(TextureUsages::RENDER_ATTACHMENT),
+			aspect: TextureAspect::All,
+			base_mip_level: 0,
+			mip_level_count: None,
+			base_array_layer: 0,
+			array_layer_count: None,
+		});
+
+		let mut rng = rand::thread_rng();
+		self.scene.update_time(time);
+		self.scene.points_mut().iter_mut().enumerate().for_each(|(i, Point {color, position})| {
+			*position = [
+				400. + (i as f32 / 200. * 2. * std::f32::consts::PI).sin() * 100. + time.sin() * 200.,
+				300. + (i as f32 / 200. * 2. * std::f32::consts::PI).cos() * 100. + time.cos() * 200.,
+			];
+		});
+		self.scene.update_points_buffer(&self.render_context);
+		
+		self.scene.render(&texture_view, &self.render_context, &self.shader_manager);
+		
+		surface_texture.present();
+		self.window.request_redraw();
 	}
 }
 
@@ -93,7 +137,7 @@ impl winit::application::ApplicationHandler for App {
 			}
 			WindowEvent::Resized(new_size) => {
 				inner.render_context.resize(new_size);
-				inner.scene.iter_mut().for_each(|x| x.update_uniform(&inner.render_context));
+				inner.scene.update_size(&inner.render_context);
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
@@ -110,23 +154,7 @@ impl winit::application::ApplicationHandler for App {
 				// You only need to call this if you've determined that you need to redraw in
 				// applications which do not always need to. Applications that redraw continuously
 				// can render here instead.
-				let surface_texture = inner.render_context.surface().get_current_texture()
-					.expect("Could not get current texture");
-				let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor{
-					label: Some("Render Texture"),
-					format: Some(surface_texture.texture.format()),
-					dimension: Some(TextureViewDimension::D2),
-					usage: Some(TextureUsages::RENDER_ATTACHMENT),
-					aspect: TextureAspect::All,
-					base_mip_level: 0,
-					mip_level_count: None,
-					base_array_layer: 0,
-					array_layer_count: None,
-				});
-				inner.scene.iter().for_each(|x| x.render(&texture_view, &inner.render_context, &inner.shader_manager));
-				
-				surface_texture.present();
-				inner.window.request_redraw();
+				inner.render_frame();
 			}
 			_ => (),
 		}
