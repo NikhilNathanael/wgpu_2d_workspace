@@ -211,8 +211,33 @@ pub mod point {
 }
 
 pub mod triangle {
+	use super::*;
+	use crate::wgpu_context::*;
+	use bytemuck::{Zeroable, Pod};
+
+	#[repr(C)]
+	#[derive(Zeroable, Pod, Clone, Copy)]
+	pub struct Uniform {
+		pub size: [f32;2],
+	}
+
+	impl BufferData for Uniform {
+		type Buffers = UniformBuffer;
+		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+			Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
+		}
+		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+			buffers.write_data(bytemuck::bytes_of(self), context);
+		}
+	}
+	
+	impl Uniform {
+
+	}
+
 	struct Triangle {
-		
+		points: [Point;3],
+		uniform: BufferAndData<Uniform>,
 	}
 }
 

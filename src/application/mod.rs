@@ -1,4 +1,3 @@
-use std::sync::mpsc::{channel, Sender, SendError};
 use std::sync::Arc;
 use std::thread;
 
@@ -96,7 +95,7 @@ impl AppInner {
 
 		let mut rng = rand::thread_rng();
 		self.scene.update_time(time);
-		self.scene.points_mut().iter_mut().enumerate().for_each(|(i, Point {color, position})| {
+		self.scene.points_mut().iter_mut().enumerate().for_each(|(i, Point {position, ..})| {
 			*position = [
 				400. + (i as f32 / 200. * 2. * std::f32::consts::PI).sin() * 100. + time.sin() * 200.,
 				300. + (i as f32 / 200. * 2. * std::f32::consts::PI).cos() * 100. + time.cos() * 200.,

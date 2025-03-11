@@ -203,7 +203,7 @@ mod buffers {
 			{
 				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
 				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
-					.expect("Could nto write to buffer")
+					.expect("Could not write to buffer")
 					.chunks_mut(std::mem::size_of::<T>())
 					.zip(data)
 					.for_each(|(buffer_slice, data_elem)| 
@@ -272,7 +272,7 @@ mod buffers {
 			{
 				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
 				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
-					.expect("Could nto write to buffer")
+					.expect("Could not write to buffer")
 					.chunks_mut(std::mem::size_of::<T>())
 					.zip(data)
 					.for_each(|(buffer_slice, data_elem)| {
@@ -341,7 +341,7 @@ mod buffers {
 			{
 				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
 				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
-					.expect("Could nto write to buffer")
+					.expect("Could not write to buffer")
 					.chunks_mut(std::mem::size_of::<T>())
 					.zip(data)
 					.for_each(|(buffer_slice, data_elem)| 
@@ -410,7 +410,7 @@ mod buffers {
 			{
 				let total_size = (std::mem::size_of::<T>() * data.len()) as u64;
 				context.queue().write_buffer_with(&self.buffer, 0, NonZero::new(total_size).unwrap())
-					.expect("Could nto write to buffer")
+					.expect("Could not write to buffer")
 					.chunks_mut(std::mem::size_of::<T>())
 					.zip(data)
 					.for_each(|(buffer_slice, data_elem)| 
