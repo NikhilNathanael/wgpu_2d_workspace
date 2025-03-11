@@ -4,6 +4,7 @@ pub mod key_map {
     use winit::event::ElementState;
 	use winit::keyboard::Key;
 
+	#[macro_export]
 	macro_rules! key_char {
 		($name: literal) => {
 			winit::keyboard::Key::Character(winit::keyboard::SmolStr::new_static($name))

@@ -84,7 +84,7 @@ impl ShaderManager {
 	}
 
 	pub fn get_render_pipeline<'a>(&'a self, label: &str, context: &WGPUContext) -> &'a RenderPipeline {
-		(match self.render_pipelines.lock().unwrap()
+		match self.render_pipelines.lock().unwrap()
 			.get_mut(label)
 			.expect("Tried to access a render pipeline that wasn't registered")
 			{
@@ -103,7 +103,7 @@ impl ShaderManager {
 					// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
 					) as *const RenderPipeline
 				)},
-		})
+		}
 	}
 
 	pub fn register_render_pipeline(&self, label: &'static str, template: RenderPipelineDescriptorTemplate) {
@@ -112,7 +112,7 @@ impl ShaderManager {
 			// we only have shared access to self here so there may be borrows into 
 			// any existing pipeline here.
 			// we must take care not to remove any existing render pipelines
-			Entry::Occupied(x) => (),
+			Entry::Occupied(_) => (),
 
 			// this insertion is fine because there is not render pipeline to 
 			// invalidate here

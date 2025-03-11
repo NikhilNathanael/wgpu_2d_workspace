@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::thread;
 
 use wgpu::*;
 
@@ -10,17 +9,18 @@ use winit::dpi::PhysicalSize;
 use winit::keyboard::{Key, NamedKey};
 
 use super::wgpu_context::*;
-use super::input::KeyMap;
+use super::input::*;
 use super::shader_manager::*;
 
 use crate::rendering::{PointRenderer, Point, create_circle_point_list};
 use crate::timer::Timer;
 
-use rand::Rng;
+use crate::key_char;
+
+// use rand::Rng;
 
 pub struct App{
 	title: &'static str,
-	key_map: KeyMap,
 	inner: Option<AppInner>,
 }
 
@@ -28,7 +28,6 @@ impl App {
 	pub fn new (title: &'static str) -> Self {
 		Self {
 			title,
-			key_map: KeyMap::new(),
 			inner: None,
 		}
 	}
@@ -42,6 +41,9 @@ impl App {
 
 		// Create shader_manager
 		let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
+
+		// Create key map
+		let key_map = KeyMap::new();
 		
 		// Create WGPU context
 		let render_context = WGPUContext::new(Arc::clone(&window));
@@ -59,6 +61,7 @@ impl App {
 			scene,
 			shader_manager,
 			timer,
+			key_map,
 		});
 	}
 }
@@ -69,13 +72,14 @@ struct AppInner {
 	scene: PointRenderer,
 	shader_manager: ShaderManager,
 	timer: Timer,
+	key_map: KeyMap,
 }
 
 impl AppInner {
 	pub fn render_frame(&mut self) {
-		let time = self.timer.elapsed_start();
-		let delta = self.timer.elapsed_reset();
-		log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
+		self.update_scene();
+
+		// log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
 		self.timer.reset();
 
 		let surface_texture = self.render_context.surface().get_current_texture()
@@ -92,21 +96,31 @@ impl AppInner {
 			base_array_layer: 0,
 			array_layer_count: None,
 		});
-
-		let mut rng = rand::thread_rng();
-		self.scene.update_time(time);
-		self.scene.points_mut().iter_mut().enumerate().for_each(|(i, Point {position, ..})| {
-			*position = [
-				400. + (i as f32 / 200. * 2. * std::f32::consts::PI).sin() * 100. + time.sin() * 200.,
-				300. + (i as f32 / 200. * 2. * std::f32::consts::PI).cos() * 100. + time.cos() * 200.,
-			];
-		});
-		self.scene.update_points_buffer(&self.render_context);
 		
 		self.scene.render(&texture_view, &self.render_context, &self.shader_manager);
 		
 		surface_texture.present();
 		self.window.request_redraw();
+	}
+
+	pub fn update_scene(&mut self) {
+		let time = self.timer.elapsed_start();
+		let delta = self.timer.elapsed_reset();
+
+		let mut move_dir = [0., 0.];
+
+		if self.key_map.is_pressed(key_char!("w")) {move_dir[1] -= delta * 500.;}
+		if self.key_map.is_pressed(key_char!("s")) {move_dir[1] += delta * 500.;}
+		if self.key_map.is_pressed(key_char!("a")) {move_dir[0] -= delta * 500.;}
+		if self.key_map.is_pressed(key_char!("d")) {move_dir[0] += delta * 500.;}
+
+		if move_dir != [0., 0.] {
+			let mut rng = rand::thread_rng();
+			self.scene.points_mut().iter_mut().enumerate().for_each(|(i, Point {position, ..})| {
+				*position = [position[0] + move_dir[0], position[1] + move_dir[1]];
+			});
+			self.scene.update_points_buffer(&self.render_context);
+		};
 	}
 }
 
@@ -131,7 +145,7 @@ impl winit::application::ApplicationHandler for App {
 				match event.logical_key {
 					Key::Named(NamedKey::Escape) => event_loop.exit(),
 					Key::Named(NamedKey::Space) => inner.shader_manager.reload(),
-					x => self.key_map.handle_key(x, event.state),
+					x => inner.key_map.handle_key(x, event.state),
 				}
 			}
 			WindowEvent::Resized(new_size) => {

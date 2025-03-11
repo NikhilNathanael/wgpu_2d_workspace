@@ -1,6 +1,4 @@
 pub mod point {
-	use std::sync::LazyLock;
-	use std::borrow::Cow;
 
 	use crate::wgpu_context::*;
 	use wgpu::*;
@@ -17,9 +15,9 @@ pub mod point {
 	}
 
 	impl BufferData for Uniform {
-		type Buffers = UniformBuffer;
+		type Buffers = WGPUBuffer;
 		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
+			Self::Buffers::new_uniform(std::mem::size_of::<Self>() as u64, context)
 		}
 		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
 			buffers.write_data(bytemuck::bytes_of(self), context);
@@ -34,11 +32,11 @@ pub mod point {
 	}
 
 	impl BufferData for Vec<Point> {
-		type Buffers = (VertexBuffer, VertexBuffer);
+		type Buffers = (WGPUBuffer, WGPUBuffer);
 		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
 			(
-				VertexBuffer::create((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context),
-				VertexBuffer::create((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
+				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context),
+				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
 			)
 		}
 		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
@@ -46,11 +44,6 @@ pub mod point {
 			buffers.1.write_iter(self.iter().map(|x| &x.position), context);
 		}
 	}
-
-	static POINT_SHADER_SOURCE: LazyLock<String> = LazyLock::new(|| {
-		std::fs::read_to_string(SHADER_DIRECTORY.to_owned() + "points.wgsl")
-			.expect("Could not read shader source")
-	});
 
 	pub struct PointRenderer {
 		points: BufferAndData<Vec<Point>>,
@@ -211,40 +204,6 @@ pub mod point {
 }
 
 pub mod triangle {
-	use super::*;
-	use crate::wgpu_context::*;
-	use bytemuck::{Zeroable, Pod};
-
-	#[repr(C)]
-	#[derive(Zeroable, Pod, Clone, Copy)]
-	pub struct Uniform {
-		pub size: [f32;2],
-	}
-
-	impl BufferData for Uniform {
-		type Buffers = UniformBuffer;
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			Self::Buffers::create(std::mem::size_of::<Self>() as u64, context)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.write_data(bytemuck::bytes_of(self), context);
-		}
-	}
-	
-	impl Uniform {
-
-	}
-
-	struct Triangle {
-		points: [Point;3],
-		uniform: BufferAndData<Uniform>,
-	}
 }
 
 pub use point::*;
-
-use super::wgpu_context::WGPUContext;
-
-pub trait Render {
-	fn render(&self, context: WGPUContext);
-}
