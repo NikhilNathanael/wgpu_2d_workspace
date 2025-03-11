@@ -16,6 +16,8 @@ use crate::timer::Timer;
 
 use crate::key_char;
 
+use rand::Rng;
+
 pub struct App{
 	title: &'static str,
 	inner: Option<AppInner>,
@@ -72,11 +74,25 @@ impl App {
 		];
 		let triangle = TriangleListRenderer::new(triangle, &render_context, &shader_manager);
 
+		let mut rng = rand::thread_rng();
+
+		let rects = (0..50).map(|_|
+			Rect{
+				color: [rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), 1.],
+				center: [
+					rng.random_range(0.0..1600.),
+					rng.random_range(0.0..1200.),
+				],
+				size: [rng.random_range(50.0..200.0), rng.random_range(50.0..200.0)],
+				rotation: rng.random_range(0.0..4.0),
+			}
+		).collect();
+		let rects = RectangleRenderer::new(rects, &render_context, &shader_manager);
 
 		self.inner = Some(AppInner{
 			window,
 			render_context,
-			scene: (points, triangle),
+			scene: (points, triangle, rects),
 			shader_manager,
 			timer,
 			key_map,
@@ -87,7 +103,7 @@ impl App {
 struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
-	scene: (PointRenderer, TriangleListRenderer),
+	scene: (PointRenderer, TriangleListRenderer, RectangleRenderer),
 	shader_manager: ShaderManager,
 	timer: Timer,
 	key_map: KeyMap,
@@ -114,8 +130,9 @@ impl AppInner {
 			array_layer_count: None,
 		});
 		
-		self.scene.1.render(&texture_view, &self.render_context, &self.shader_manager);
 		self.scene.0.render(&texture_view, &self.render_context, &self.shader_manager);
+		self.scene.1.render(&texture_view, &self.render_context, &self.shader_manager);
+		self.scene.2.render(&texture_view, &self.render_context, &self.shader_manager);
 		
 		surface_texture.present();
 		self.window.request_redraw();
@@ -169,6 +186,7 @@ impl winit::application::ApplicationHandler for App {
 				inner.render_context.resize(new_size);
 				inner.scene.0.update_size(&inner.render_context);
 				inner.scene.1.set_uniform(&inner.render_context);
+				inner.scene.2.set_uniform(&inner.render_context);
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {

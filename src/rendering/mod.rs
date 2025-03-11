@@ -229,8 +229,6 @@ pub mod triangle {
 			)
 		}
 		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			println!("{:?}", buffers.0.size());
-			println!("{:?}", buffers.1.size());
 			buffers.0.write_iter(self.iter().flat_map(|x| x.points.iter().map(|x| &x.color)), context);
 			buffers.1.write_iter(self.iter().flat_map(|x| x.points.iter().map(|x| &x.position)), context);
 		}
@@ -363,8 +361,192 @@ pub mod triangle {
 	}
 }
 
+pub mod rect {
+	use bytemuck::{Pod, Zeroable};
+	use crate::wgpu_context::*;
+
+	use wgpu::*;
+
+	use crate::shader_manager::*;
+
+	use super::point::Point;
+	use crate::vertex_buffer_layout;
+	
+	#[repr(C)]
+	#[derive(Debug, Clone, Copy, Zeroable, Pod)]
+	pub struct Uniform {
+		screen_size: [f32;2],
+	}
+
+	impl BufferData for Uniform {
+		type Buffers = WGPUBuffer;
+		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+			WGPUBuffer::new_uniform(std::mem::size_of::<Self>() as u64, context)
+		}
+		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+			buffers.write_data(bytemuck::bytes_of(self), context);
+		}
+	}
+
+	pub struct Rect {
+		pub color: [f32;4],
+		pub center: [f32;2],
+		pub size: [f32; 2],
+		pub rotation: f32,
+	}
+
+	impl BufferData for Vec<Rect> {
+		type Buffers = (WGPUBuffer, WGPUBuffer, WGPUBuffer, WGPUBuffer);
+		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+			(
+				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context),
+				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
+				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
+				WGPUBuffer::new_vertex((std::mem::size_of::<f32>() * self.len()) as u64, context),
+			)
+		}
+		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+			buffers.0.write_iter(self.iter().map(|x| &x.color), context);
+			buffers.1.write_iter(self.iter().map(|x| &x.center), context);
+			buffers.2.write_iter(self.iter().map(|x| &x.size), context);
+			buffers.3.write_iter(self.iter().map(|x| &x.rotation), context);
+		}
+	}
+
+	pub struct RectangleRenderer {
+		rectangles: BufferAndData<Vec<Rect>>,
+		uniform: BufferAndData<Uniform>,
+		bind_group: BindGroup,
+	}
+
+	impl RectangleRenderer {
+		pub fn new(data: Vec<Rect>, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+			let rectangles = BufferAndData::new(data, context);
+			let uniform = BufferAndData::new(
+				Uniform {
+					screen_size: [context.config().width as f32, context.config().height as f32],
+				}
+				, context
+			);
+
+			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
+				label: None,
+				entries: &[
+					BindGroupLayoutEntry {
+						binding: 0,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Buffer{
+							ty: BufferBindingType::Uniform,
+							has_dynamic_offset: false,
+							min_binding_size: None,
+						},
+						count: None,
+					}
+				],
+			});
+
+			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
+				label: None,
+				bind_group_layouts: &[
+					&bind_group_layout,
+				],
+				push_constant_ranges: &[],
+			});
+			
+			let render_pipeline_template = RenderPipelineDescriptorTemplate{
+				label: Some("Triangle Pipeline"),
+				layout: Some(pipeline_layout),
+				vertex: VertexStateTemplate{
+					module_path: "rect.wgsl",
+					entry_point: None,
+					buffers: &vertex_buffer_layout!(
+						([f32;4], Instance, &vertex_attr_array![0 => Float32x4]),
+						([f32;2], Instance, &vertex_attr_array![1 => Float32x2]),
+						([f32;2], Instance, &vertex_attr_array![2 => Float32x2]),
+						(f32, Instance, &vertex_attr_array![3 => Float32]),
+					)
+				},
+				primitive: PrimitiveState {
+					topology: PrimitiveTopology::TriangleStrip,
+					..Default::default()
+				},
+				depth_stencil: None,
+				multisample: Default::default(),
+				fragment: Some(FragmentStateTemplate{
+					module_path: "rect.wgsl",
+					entry_point: None,
+					targets: Box::new([
+						Some(ColorTargetState{
+							format: context.config().format,
+							blend: None,
+							write_mask: ColorWrites::ALL,
+						})
+					]),
+				}),
+				multiview: None,
+				cache: None,
+			};
+			shader_manager.register_render_pipeline("rects", render_pipeline_template);
+
+			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
+				label: None,
+				layout: &bind_group_layout,
+				entries: &[
+					BindGroupEntry{
+						binding: 0,
+						resource: uniform.buffers.as_entire_binding(),
+					},
+				],
+			});
+
+			Self {
+				rectangles,
+				uniform,
+				bind_group,
+			}
+		}
+
+		pub fn set_uniform(&mut self, context: &WGPUContext) {
+			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
+			self.uniform.update_buffer(context);
+		}
+
+		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
+			let mut encoder = context.get_encoder();
+			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
+				label: None,
+				color_attachments: &[
+					Some(RenderPassColorAttachment{
+						view: target,
+						resolve_target: None,
+						ops: Operations {
+							load: LoadOp::Load,
+							store: StoreOp::Store,
+						}
+					})
+				],
+				..Default::default()
+			});
+
+			let pipeline = shader_manager.get_render_pipeline("rects", context);
+
+			render_pass.set_pipeline(pipeline);
+			render_pass.set_bind_group(0, &self.bind_group, &[]);
+			render_pass.set_vertex_buffer(0, self.rectangles.buffers.0.slice(..));
+			render_pass.set_vertex_buffer(1, self.rectangles.buffers.1.slice(..));
+			render_pass.set_vertex_buffer(2, self.rectangles.buffers.2.slice(..));
+			render_pass.set_vertex_buffer(3, self.rectangles.buffers.3.slice(..));
+			render_pass.draw(0..4 as u32, 0..self.rectangles.data.len() as u32);
+
+			std::mem::drop(render_pass);
+			context.queue().submit([encoder.finish()]);
+		}
+	}
+}
+
 pub use point::*;
 pub use triangle::*;
+pub use rect::*;
 #[macro_export]
 macro_rules! vertex_buffer_layout {
 	($(($stridetype: ty, $mode: ident, $attributes: expr)),+ $(,)?) => {
