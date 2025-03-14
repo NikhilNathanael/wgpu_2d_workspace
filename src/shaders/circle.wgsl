@@ -16,13 +16,13 @@ struct V2F {
 // Vertex Shader outputs a quad along with the UV coordinates
 @vertex 
 fn v_main (circle: Circle, @builtin(vertex_index) v_id: u32) -> V2F {
-	let pos = quad[v_id] * circle.radius + circle.center;
+	let pos = quad_strip[v_id] * circle.radius + circle.center;
 
 	let clip_space = pos / (uni.screen_size) * 2. * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
 
 	var output: V2F;
 	output.color = circle.color;
-	output.uv = quad[v_id];
+	output.uv = quad_strip[v_id];
 	output.position = vec4<f32>(clip_space, 0., 1.);
 	/* output.position = vec4<f32>(0., 0., 0., 1.); */
 	return output;

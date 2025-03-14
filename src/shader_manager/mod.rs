@@ -67,8 +67,8 @@ impl ShaderManager {
 	}
 
 	fn resolve_source(&self, path: &str) -> (String, Vec<Box<str>>) {
+		log::trace!("resolving source for file: {:?}", path);
 		use std::io::BufRead;
-		println!("{:?}", path);
 		// Open file
 		let mut file = std::io::BufReader::new(std::fs::File::open(self.directory_path.to_string() + path)
 			.expect("Could not open file"));
@@ -135,12 +135,15 @@ impl ShaderManager {
 
 		let (source, includes) = self.resolve_source(path);
 		if includes.iter().find(|x| &***x == path).is_some() {
+			// Only works if the dependancy was already loaded, 
+			// otherwise it will just overflow the stack ¯\_(ツ)_/¯ 
+			//
+			// It is guaranteed to crash so its not really a safety problem
 			log::error!(
 				"Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}", 
 				path, includes);
 			panic!();
 		}
-		println!("{}", source);
 		use std::collections::hash_map::Entry;
 		match self.shader_source.lock().unwrap().entry(path.into()) {
 			Entry::Occupied(x) => unsafe{&*(&*x.get().0 as *const str)},
