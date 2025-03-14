@@ -742,7 +742,7 @@ mod circle {
 
 pub use point::*;
 pub use triangle::*;
-pub use rect::*;
+// pub use rect::*;
 pub use circle::*;
 #[macro_export]
 macro_rules! vertex_buffer_layout {
@@ -756,3 +756,4 @@ macro_rules! vertex_buffer_layout {
 		]
 	}
 }
+

@@ -33,3 +33,14 @@ fn init_logger() {
 // 		- Automatically reads and compiles shaders in shader directory
 // 		- Hot-reloading
 // 		- caches pipelines as well as modules
+// TODO : Unify the renderers for each type of primitive (point, triangle, 
+//        center_rect and circle for now) into a single struct with a generic parameter
+//      - Define a trait for each type of primitive
+//      	- This trait should include
+//      		- registering shaders
+//      		- registering pipelines
+//      		- creation of bind group layout
+//      		- creation of bind groups
+// TODO : Add Include files to shader manager
+// 		- read the shader input and check for any `#include "<file_name>"` fragments
+// 		- read the file indicated by that name and include it in that location

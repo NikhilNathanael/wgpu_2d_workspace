@@ -215,3 +215,124 @@ impl FragmentStateTemplate {
 		self.module_path
 	}
 }
+
+#[cfg(test)]
+mod test {
+	use std::collections::HashMap;
+	use std::sync::Mutex;
+	pub struct ShaderManager {
+		directory_path: &'static str,
+		shader_modules: Mutex<HashMap<&'static str, Box<str>>>,
+		render_pipelines: Mutex<HashMap<&'static str, (Vec<String>, Option<Box<str>>)>>,
+	}
+
+	impl ShaderManager {
+		pub fn new(directory_path: &'static str) -> Self {
+			Self {
+				directory_path,
+				shader_modules: Mutex::new(HashMap::new()),
+				render_pipelines: Mutex::new(HashMap::new()),
+			}
+		}
+
+		fn read_and_get_module(&self, path: &str) -> Box<str> {
+			path.to_owned().into()
+		}
+
+		pub fn get_module<'a>(&'a self, path: &'static str) -> &'a str {
+			// SAFETY: The only thing that can invalidate the lifetime of the returned reference 
+			// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+			//
+			// The returned reference's lifetime is tied to the shared borrow of self and we do not
+			// allow any operations with a shared reference to self to drop or remove any element 
+			// from the map
+			unsafe {&*((&**self.shader_modules.lock().unwrap()
+				.entry(path)
+				// putting a new module into the map could invalidate old references 
+				// but we ensure that this is never done to an existing module
+				.or_insert(self.read_and_get_module(path)))
+
+				// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
+				as *const str)
+			}
+		}
+
+		// fn compile_pipeline(&self, template: &RenderPipelineDescriptorTemplate, context: &WGPUContext) -> RenderPipeline {
+		// 	let paths = template.get_module_paths();
+		// 	let modules = (
+		// 		self.get_module(paths.0, context),
+		// 		paths.1.map(|x| self.get_module(x, context))
+		// 	);
+		// 	let descriptor: RenderPipelineDescriptor = template.resolve(modules.0, modules.1);
+			
+		// 	context.device().create_render_pipeline(&descriptor)
+		// }
+
+		//pub fn get_render_pipeline<'a>(&'a self, label: &str, context: &WGPUContext) -> &'a RenderPipeline {
+		//	match self.render_pipelines.lock().unwrap()
+		//		.get_mut(label)
+		//		.expect("Tried to access a render pipeline that wasn't registered")
+		//		{
+		//			// SAFETY: The only thing that can invalidate the lifetime of the returned reference 
+		//			// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+		//			//
+		//			// The returned reference's lifetime is tied to the shared borrow of self and we do not
+		//			// allow any operations with a shared reference to self to drop or remove an element 
+		//			// from the map
+		//			(template, x) => unsafe{&*(
+		//				// putting a new pipeline into the map could invalidate old references, 
+		//				// but we ensure that this is only done if there wasn't already a pipeline there
+		//				&**x.get_or_insert_with(
+		//					|| Box::new(self.compile_pipeline(template, context))
+
+		//				// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
+		//				) as *const RenderPipeline
+		//			)},
+		//	}
+		//}
+
+		// pub fn register_render_pipeline(&self, label: &'static str, template: RenderPipelineDescriptorTemplate) {
+		// 	match self.render_pipelines.lock().unwrap()
+		// 		.entry(label) {
+		// 		// we only have shared access to self here so there may be borrows into 
+		// 		// any existing pipeline here.
+		// 		// we must take care not to remove any existing render pipelines
+		// 		Entry::Occupied(_) => (),
+
+		// 		// this insertion is fine because there is not render pipeline to 
+		// 		// invalidate here
+		// 		Entry::Vacant(x) => {x.insert((template, None));},
+		// 	}
+		// }
+
+		pub fn reload(&mut self) {
+			// These mutable operations are fine because we have mutable access to self
+			// so there are no borrows of this data
+			self.shader_modules.lock().unwrap().clear();
+			self.render_pipelines.lock().unwrap().iter_mut().for_each(|(_, (_, x))| *x = None);
+		}
+	}
+
+	#[test] 
+	fn basic_test () {
+		let mut x = ShaderManager::new(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/"));
+		let mut vec = Vec::new();
+		for i in (0..50) {
+			vec.push(x.get_module("points.wgsl"));
+		}
+		for i in (0..50) {
+			vec.push(x.get_module("rect.wgsl"));
+		}
+		println!("{:?}", vec);
+		vec = Vec::new();
+		x.reload();
+		for i in (0..50) {
+			vec.push(x.get_module("points.wgsl"));
+			vec.push(x.get_module("rect.wgsl"));
+		}
+		for i in (0..50) {
+			vec.push(x.get_module("triangle.wgsl"));
+		}
+		println!("{:?}", vec);
+	}
+}

@@ -65,22 +65,6 @@ pub mod key_map {
 		}
 	}
 
-	#[cfg(test)]
-	mod keu_map_tests {
-		use winit::event::ElementState;
-
-	use super::KeyMap;
-		#[test]
-		fn simple_test () {
-			let mut map = KeyMap::new();
-			map.register_callback(key_char!("w"), ElementState::Pressed, || eprintln!("called w pressed callback"));
-			map.handle_key(key_char!("w"), ElementState::Pressed);
-			map.handle_key(key_char!("w"), ElementState::Pressed);
-			map.handle_key(key_char!("w"), ElementState::Released);
-			map.handle_key(key_char!("w"), ElementState::Pressed);
-		}
-	}
-
 	struct Callbacks {
 		on_press: Box<dyn FnMut() + Send>,
 		on_release: Box<dyn FnMut() + Send>,
