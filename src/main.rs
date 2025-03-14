@@ -25,7 +25,7 @@ fn init_logger() {
 		.unwrap();
 }
 
-// TODO: Timer struct
+// TODO (Finished) : Timer struct
 // 		- total time since start
 // 		- time since last reset (usually last frame)
 // 		- integer based (No floating point precision issues)

@@ -51,9 +51,11 @@ impl App {
 		let timer = Timer::new();
 
 		// Create scene
+		//  - Points
 		let points = create_circle_point_list(200, 50.,[50. , 400.]);
 		let points = PointRenderer::new(points, &render_context, &shader_manager);
 
+		//  - Triangle
 		let triangle = vec![
 			Triangle {
 				points: [
@@ -74,25 +76,38 @@ impl App {
 		];
 		let triangle = TriangleListRenderer::new(triangle, &render_context, &shader_manager);
 
-		let mut rng = rand::thread_rng();
+		let mut rng = rand::rng();
 
-		let rects = (0..50).map(|_|
-			Rect{
+		//  - Rectangles
+		// let rects = (0..50).map(|_|
+		// 	CenterRect{
+		// 		color: [rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), 1.],
+		// 		center: [
+		// 			rng.random_range(0.0..1600.),
+		// 			rng.random_range(0.0..1200.),
+		// 		],
+		// 		size: [rng.random_range(50.0..200.0), rng.random_range(50.0..200.0)],
+		// 		rotation: rng.random_range(0.0..4.0),
+		// 	}
+		// ).collect();
+		// let rects = RectangleRenderer::new(rects, &render_context, &shader_manager);
+
+		//  - Circles
+		let circles = vec![
+			Circle {
 				color: [rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), 1.],
-				center: [
-					rng.random_range(0.0..1600.),
-					rng.random_range(0.0..1200.),
+				position: [
+					0., 0.,
 				],
-				size: [rng.random_range(50.0..200.0), rng.random_range(50.0..200.0)],
-				rotation: rng.random_range(0.0..4.0),
+				radius: 100.,
 			}
-		).collect();
-		let rects = RectangleRenderer::new(rects, &render_context, &shader_manager);
+		];
+		let circles = CircleRenderer::new(circles, &render_context, &shader_manager);
 
 		self.inner = Some(AppInner{
 			window,
 			render_context,
-			scene: (points, triangle, rects),
+			scene: (points, triangle, circles),
 			shader_manager,
 			timer,
 			key_map,
@@ -103,7 +118,7 @@ impl App {
 struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
-	scene: (PointRenderer, TriangleListRenderer, RectangleRenderer),
+	scene: (PointRenderer, TriangleListRenderer, CircleRenderer),
 	shader_manager: ShaderManager,
 	timer: Timer,
 	key_map: KeyMap,
@@ -112,6 +127,7 @@ struct AppInner {
 impl AppInner {
 	pub fn render_frame(&mut self) {
 		// log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
+		// self.timer.reset();
 		self.update_scene();
 
 
@@ -156,10 +172,10 @@ impl AppInner {
 			self.scene.0.update_points_buffer(&self.render_context);
 		};
 
-		self.scene.2.rects_mut().iter_mut().for_each(|Rect{rotation, ..}| {
-			*rotation += delta;
-		});
-		self.scene.2.update_rects(&self.render_context);
+		// self.scene.2.rects_mut().iter_mut().for_each(|CenterRect{rotation, ..}| {
+		// 	*rotation += delta;
+		// });
+		// self.scene.2.update_rects(&self.render_context);
 	}
 }
 
@@ -209,6 +225,14 @@ impl winit::application::ApplicationHandler for App {
 				// applications which do not always need to. Applications that redraw continuously
 				// can render here instead.
 				inner.render_frame();
+			}
+			WindowEvent::CursorMoved{position: mouse_position,..} => {
+				inner.scene.2.circles_mut()
+					.iter_mut()
+					.for_each(|Circle{position,..}| 
+						 *position = [mouse_position.x as f32, mouse_position.y as f32]
+					);
+				inner.scene.2.update_circles(&inner.render_context);
 			}
 			_ => (),
 		}

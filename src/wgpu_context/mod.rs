@@ -39,7 +39,7 @@ impl WGPUContext {
 			width: size.width,
 			height: size.height,
 			present_mode: wgpu::PresentMode::Fifo,
-			desired_maximum_frame_latency: 3,
+			desired_maximum_frame_latency: 0,
 			alpha_mode: CompositeAlphaMode::Auto,
 			view_formats: vec![capabilities.formats[0]],
 		};
