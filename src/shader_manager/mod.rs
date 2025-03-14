@@ -80,11 +80,9 @@ impl ShaderManager {
 		while let Ok(x) = file.read_line(&mut line) {
 			// read_line returns Ok(0) after EOF
 			if x == 0 {break;}
-			println!("{:?}", x);
 			match get_include_path(&*line) {
 				None => source.push_str(&line),
 				Some(Include::Absolute(path)) => {
-					println!("{:?}", path);
 					let include_source = self.get_source(path);
 					let include_includes = self.get_includes(path);
 					includes.extend_from_slice(include_includes);
@@ -94,6 +92,7 @@ impl ShaderManager {
 			}
 			line.clear();
 		}
+		log::trace!("finished resolving source for file: {:?}", path);
 		return (source, includes);
 
 		// Turns a line like 
@@ -113,18 +112,28 @@ impl ShaderManager {
 	}
 
 	fn get_includes<'a> (&self, path: &str) -> &'a [Box<str>] {
-		let mut lock = self.shader_source.lock().unwrap();
-		unsafe{&*(&*lock.entry(path.into())
-			.or_insert({
-				let (source, includes) = self.resolve_source(path);
-				if includes.iter().find(|x| &***x == path).is_some() {
-					log::error!(
-						"Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}", 
-						path, includes);
-					panic!();
-				}
-				(source, includes)
-			}).1 as *const [Box<str>])}
+		match self.shader_source.lock().unwrap().get(path) {
+			None => (),
+			Some((_, includes)) => return unsafe{&*(&**includes as *const [Box<str>])},
+		}
+		log::info!("source file not already loaded: {:?}", path);
+
+		let (source, includes) = self.resolve_source(path);
+		if includes.iter().find(|x| &***x == path).is_some() {
+			// Only works if the dependancy was already loaded, 
+			// otherwise it will just overflow the stack ¯\_(ツ)_/¯ 
+			//
+			// It is guaranteed to crash so its not really a safety problem
+			log::error!(
+				"Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}", 
+				path, includes);
+			panic!();
+		}
+		use std::collections::hash_map::Entry;
+		match self.shader_source.lock().unwrap().entry(path.into()) {
+			Entry::Occupied(x) => unsafe{&*(&*x.get().1 as *const [Box<str>])},
+			Entry::Vacant(x) => unsafe{&*(&*x.insert((source, includes)).1 as *const [Box<str>])}
+		}
 	}
 
 	fn get_source<'a>(&'a self, path: &str) -> &'a str {
@@ -132,6 +141,7 @@ impl ShaderManager {
 			None => (),
 			Some((source, _)) => return unsafe{&*(&**source as *const str)},
 		}
+		log::info!("source file not already loaded: {:?}", path);
 
 		let (source, includes) = self.resolve_source(path);
 		if includes.iter().find(|x| &***x == path).is_some() {
@@ -228,6 +238,7 @@ impl ShaderManager {
 	pub fn reload(&mut self) {
 		// These mutable operations are fine because we have mutable access to self
 		// so there are no borrows of this data
+		self.shader_source.lock().unwrap().clear();
 		self.shader_modules.lock().unwrap().clear();
 		self.render_pipelines.lock().unwrap().iter_mut().for_each(|(_, (_, x))| *x = None);
 	}
