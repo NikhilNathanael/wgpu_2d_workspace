@@ -9,7 +9,7 @@ use std::collections::hash_map::Entry;
 
 // Manages loading and compilation of shaders from disk
 //
-// uses unsafe code to allow taking shared references into the data while 
+// Uses unsafe code to allow taking shared references into the data while 
 // mutating the HashMaps. This use of unsafe has been thought through but 
 // it has not been fully verified. Specific safety comments can be found 
 // at the site of the unsafe blocks
@@ -27,34 +27,136 @@ use std::collections::hash_map::Entry;
 // Unanswered questions about safety
 // 	- The code below creates mutable references to the box (&mut Box<T>). Care is taken to
 // 	  avoid a shared reference to the actual box (i.e. &Box<T>) as that would immediately be UB. 
-// 	  However, the returned reference (&'a T) is derived from such a shared reference.
+// 	  However, the returned reference (&'a T) is derived from such a shared reference. It is 
+// 	  unclear if this is also UB
+//
+// 	- A simplified version of the shader manager which requires no OS code (file opening) 
+// 	was tested with miri in the test module below. It detected no UB in the current configuration
+// 		- A sanity check was performed by returning a static refernce from get_module and it 
+// 		  correctly identified the UB
+//  - This seems to suggest that this use of unsafe is indeed sound, but further research is needed
 // 	  
 
+// Note: The shader manager uses 'static strs as the keys to the maps currently,
+// In all examples so far, a hardcoded string has been sufficient to specify the 
+// shader, so there is no overhead.
+// However, if shader paths need to be determined at runtime, the only way to use 
+// this structure is by leaking a string (with String::leak or Box::leak).
+// It can be changed to use a Box<str> as the key in that case
+
+enum Include<'a> {
+	Absolute(&'a str),
+	Relative(&'a str),
+}
+
 pub struct ShaderManager {
-	directory_path: &'static str,
-	shader_modules: Mutex<HashMap<&'static str, Box<ShaderModule>>>,
-	render_pipelines: Mutex<HashMap<&'static str, (RenderPipelineDescriptorTemplate, Option<Box<RenderPipeline>>)>>,
+	directory_path: Box<str>,
+	shader_source: Mutex<HashMap<Box<str>, (String, Vec<Box<str>>)>>,
+	shader_modules: Mutex<HashMap<Box<str>, Box<ShaderModule>>>,
+	render_pipelines: Mutex<HashMap<Box<str>, (RenderPipelineDescriptorTemplate, Option<Box<RenderPipeline>>)>>,
 }
 
 impl ShaderManager {
-	pub fn new(directory_path: &'static str) -> Self {
+	pub fn new(directory_path: &str) -> Self {
 		Self {
-			directory_path,
+			directory_path: directory_path.into(),
+			shader_source: Mutex::new(HashMap::new()),
 			shader_modules: Mutex::new(HashMap::new()),
 			render_pipelines: Mutex::new(HashMap::new()),
 		}
 	}
 
-	fn read_and_get_module(&self, path: &'static str, context: &WGPUContext) -> ShaderModule {
-		let file = Cow::Owned(std::fs::read_to_string(self.directory_path.to_owned() + path)
-			.expect("Could not read shader file"));
+	fn resolve_source(&self, path: &str) -> (String, Vec<Box<str>>) {
+		use std::io::BufRead;
+		println!("{:?}", path);
+		// Open file
+		let mut file = std::io::BufReader::new(std::fs::File::open(self.directory_path.to_string() + path)
+			.expect("Could not open file"));
+		let mut includes = Vec::new();
+		let mut source = String::new();
+
+		let mut line = String::new();
+		
+		while let Ok(x) = file.read_line(&mut line) {
+			// read_line returns Ok(0) after EOF
+			if x == 0 {break;}
+			println!("{:?}", x);
+			match get_include_path(&*line) {
+				None => source.push_str(&line),
+				Some(Include::Absolute(path)) => {
+					println!("{:?}", path);
+					let include_source = self.get_source(path);
+					let include_includes = self.get_includes(path);
+					includes.extend_from_slice(include_includes);
+					source.push_str(include_source);
+				}
+				_ => unimplemented!(),
+			}
+			line.clear();
+		}
+		return (source, includes);
+
+		// Turns a line like 
+		// | #include <<path/to/file>> into `Some(Include::Absolute("path/to/file"))`
+		fn get_include_path(line: &str) -> Option<Include> {
+			let path_container = line.trim()
+				.split_once("#include")?.1
+				.trim();
+			(|| Some(Include::Absolute(
+					path_container
+						.split_once('<')?.1
+						.rsplit_once('>')?.0
+			)))().or(
+				None
+			)
+		}
+	}
+
+	fn get_includes<'a> (&self, path: &str) -> &'a [Box<str>] {
+		let mut lock = self.shader_source.lock().unwrap();
+		unsafe{&*(&*lock.entry(path.into())
+			.or_insert({
+				let (source, includes) = self.resolve_source(path);
+				if includes.iter().find(|x| &***x == path).is_some() {
+					log::error!(
+						"Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}", 
+						path, includes);
+					panic!();
+				}
+				(source, includes)
+			}).1 as *const [Box<str>])}
+	}
+
+	fn get_source<'a>(&'a self, path: &str) -> &'a str {
+		match self.shader_source.lock().unwrap().get(path) {
+			None => (),
+			Some((source, _)) => return unsafe{&*(&**source as *const str)},
+		}
+
+		let (source, includes) = self.resolve_source(path);
+		if includes.iter().find(|x| &***x == path).is_some() {
+			log::error!(
+				"Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}", 
+				path, includes);
+			panic!();
+		}
+		println!("{}", source);
+		use std::collections::hash_map::Entry;
+		match self.shader_source.lock().unwrap().entry(path.into()) {
+			Entry::Occupied(x) => unsafe{&*(&*x.get().0 as *const str)},
+			Entry::Vacant(x) => unsafe{&*(&*x.insert((source, includes)).0 as *const str)}
+		}
+	}
+
+	fn read_and_get_module(&self, path: &str, context: &WGPUContext) -> ShaderModule {
+		let file = Cow::Borrowed(self.get_source(path));
 		context.device().create_shader_module(ShaderModuleDescriptor{
 			label: Some(path),
 			source: ShaderSource::Wgsl(file),
 		})
 	}
 
-	pub fn get_module<'a>(&'a self, path: &'static str, context: &WGPUContext) -> &'a ShaderModule {
+	pub fn get_module<'a>(&'a self, path: &str, context: &WGPUContext) -> &'a ShaderModule {
 		// SAFETY: The only thing that can invalidate the lifetime of the returned reference 
 		// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
 		//
@@ -62,7 +164,7 @@ impl ShaderManager {
 		// allow any operations with a shared reference to self to drop or remove any element 
 		// from the map
 		unsafe {&*(&**self.shader_modules.lock().unwrap()
-			.entry(path)
+			.entry(path.into())
 			// putting a new module into the map could invalidate old references 
 			// but we ensure that this is never done to an existing module
 			.or_insert(Box::new(self.read_and_get_module(path, context)))
@@ -106,9 +208,9 @@ impl ShaderManager {
 		}
 	}
 
-	pub fn register_render_pipeline(&self, label: &'static str, template: RenderPipelineDescriptorTemplate) {
+	pub fn register_render_pipeline(&self, label: &str, template: RenderPipelineDescriptorTemplate) {
 		match self.render_pipelines.lock().unwrap()
-			.entry(label) {
+			.entry(label.into()) {
 			// we only have shared access to self here so there may be borrows into 
 			// any existing pipeline here.
 			// we must take care not to remove any existing render pipelines
@@ -334,5 +436,17 @@ mod test {
 			vec.push(x.get_module("triangle.wgsl"));
 		}
 		println!("{:?}", vec);
+	}
+}
+
+#[cfg(test)]
+mod test2 {
+	use crate::wgpu_context;
+	use super::*;
+	#[test]
+	fn include_resolution_test() {
+		let x = ShaderManager::new(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/"));
+		println!("{:?}", x.directory_path);
+		x.get_source("circle.wgsl");
 	}
 }

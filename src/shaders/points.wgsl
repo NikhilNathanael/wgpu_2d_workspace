@@ -1,3 +1,5 @@
+#include<common.wgsl>
+
 struct Point {
 	@location(0) color: vec4<f32>,
 	@location(1) position: vec2<f32>,
@@ -8,15 +10,9 @@ struct V2F {
 	@location(0) color: vec4<f32>,
 }
 
-struct Uniform {
-	size: vec2<f32>,
-}
-
-@group(0) @binding(0) var<uniform> uni: Uniform;
-
 @vertex
 fn v_main(point: Point) -> V2F {
-	let clip_space = point.position / (uni.size) * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
+	let clip_space = point.position / (uni.screen_size) * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
 
 	var output: V2F;
 	output.color = point.color;

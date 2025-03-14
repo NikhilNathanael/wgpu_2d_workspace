@@ -1,9 +1,4 @@
-struct Uniform {
-	screen_size: vec2<f32>,
-}
-
-@group(0) @binding(0) var<uniform> uni: Uniform;
-
+#include<common.wgsl>
 struct Rect {
 	@location(0) color: vec4<f32>,
 	@location(1) center: vec2<f32>,

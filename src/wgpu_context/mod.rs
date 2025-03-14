@@ -55,9 +55,9 @@ impl WGPUContext {
 
 		device.on_uncaptured_error(Box::new(|error| {
 			match error {
-				wgpu::Error::OutOfMemory{..} => println!("Out of memory"),
-				wgpu::Error::Validation{description, ..} => println!("Validation Error: {description}"),
-				wgpu::Error::Internal{description, ..} => println!("Internal Error: {description}"),
+				wgpu::Error::OutOfMemory{..} => log::error!("Out of memory"),
+				wgpu::Error::Validation{description, ..} => log::error!("Validation Error: {description}"),
+				wgpu::Error::Internal{description, ..} => log::error!("Internal Error: {description}"),
 			}
 			std::process::exit(25);
 		}));
