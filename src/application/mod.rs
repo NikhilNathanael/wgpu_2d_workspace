@@ -30,13 +30,20 @@ impl App {
 			inner: None,
 		}
 	}
-	
-	pub fn init_inner(&mut self, event_loop: &ActiveEventLoop) {
-		// Create window
-		let window = Arc::new(event_loop.create_window(
-			Window::default_attributes()
-				.with_title(self.title.to_owned())
-			).expect("Could not create window"));
+}
+
+struct AppInner {
+	window: Arc<Window>,
+	render_context: WGPUContext,
+	scene: (PointRenderer, TriangleListRenderer, CircleRenderer),
+	shader_manager: ShaderManager,
+	timer: Timer,
+	key_map: KeyMap,
+}
+
+impl AppInner {
+	pub fn init(window: Window) -> Self {
+		let window = Arc::new(window);
 
 		// Create shader_manager
 		let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
@@ -104,27 +111,16 @@ impl App {
 		];
 		let circles = CircleRenderer::new(circles, &render_context, &shader_manager);
 
-		self.inner = Some(AppInner{
+		Self {
 			window,
 			render_context,
 			scene: (points, triangle, circles),
 			shader_manager,
 			timer,
 			key_map,
-		});
+		}
 	}
-}
 
-struct AppInner {
-	window: Arc<Window>,
-	render_context: WGPUContext,
-	scene: (PointRenderer, TriangleListRenderer, CircleRenderer),
-	shader_manager: ShaderManager,
-	timer: Timer,
-	key_map: KeyMap,
-}
-
-impl AppInner {
 	pub fn render_frame(&mut self) {
 		// log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
 		// self.timer.reset();
@@ -183,7 +179,12 @@ impl winit::application::ApplicationHandler for App {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
 		match &self.inner {
 			None => {
-				self.init_inner(event_loop);
+		// Create window
+				let window = event_loop.create_window(
+					Window::default_attributes()
+					.with_title(self.title.to_owned())
+					).expect("Could not create window");
+				self.inner = Some(AppInner::init(window));
 			}	
 			_ => (),
 		}

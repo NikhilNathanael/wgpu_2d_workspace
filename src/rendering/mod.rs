@@ -696,7 +696,6 @@ mod circle {
 
 		pub fn set_uniform(&mut self, context: &WGPUContext) {
 			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
-			println!("uniform data: {:?}", self.uniform.data.screen_size);
 			self.uniform.update_buffer(context);
 		}
 

@@ -116,7 +116,7 @@ impl ShaderManager {
 			None => (),
 			Some((_, includes)) => return unsafe{&*(&**includes as *const [Box<str>])},
 		}
-		log::info!("source file not already loaded: {:?}", path);
+		log::debug!("source file not already loaded: {:?}", path);
 
 		let (source, includes) = self.resolve_source(path);
 		if includes.iter().find(|x| &***x == path).is_some() {
@@ -141,7 +141,7 @@ impl ShaderManager {
 			None => (),
 			Some((source, _)) => return unsafe{&*(&**source as *const str)},
 		}
-		log::info!("source file not already loaded: {:?}", path);
+		log::debug!("source file not already loaded: {:?}", path);
 
 		let (source, includes) = self.resolve_source(path);
 		if includes.iter().find(|x| &***x == path).is_some() {

@@ -12,7 +12,7 @@ pub mod key_map {
 	}
 
 	pub struct KeyMap {
-		callbacks : HashMap<Key, Callbacks>,
+		callbacks : HashMap<Box<str>, Box<dyn FnMut(Key, ElementState) + 'static + Send>>,
 		pressed_keys: HashSet<Key>,
 	}
 
@@ -25,34 +25,24 @@ pub mod key_map {
 		}
 
 		pub fn handle_key (&mut self, key: Key, state: ElementState) {
+			// Call all callbacks
+			self.callbacks.iter_mut().for_each(|(_, callback)| callback(key.clone(), state));
 			match (state, self.pressed_keys.contains(&key)) {
-				(ElementState::Pressed, false) => {self.call_callback(&key, state); self.pressed_keys.insert(key);}
-				(ElementState::Released, true) => {self.call_callback(&key, state); self.pressed_keys.remove(&key);}
+				(ElementState::Pressed, false) => {self.pressed_keys.insert(key);}
+				(ElementState::Released, true) => {self.pressed_keys.remove(&key);}
 				_ => (),
-			}
+			};
 		}
 
-		pub fn register_callback<F: FnMut() + 'static + Send> (&mut self, key: Key, state: ElementState, callback: F) {
-			let entry = self.callbacks.entry(key)
-				.or_default();
-			match state {
-				ElementState::Pressed => entry.on_press = Box::new(callback),
-				ElementState::Released => entry.on_release = Box::new(callback),
-			}
+		pub fn register_callback<F: FnMut(Key, ElementState) + 'static + Send> (&mut self, label: &str, callback: F) {
+			match self.callbacks.get(label) {
+				None => self.callbacks.insert(label.into(), Box::new(callback)),
+				Some(_) => panic!("callback already exists with this label"),
+			};
 		}
 
 		pub fn is_pressed(&self, key: Key) -> bool {
 			self.pressed_keys.contains(&key)
-		}
-
-		fn call_callback(&mut self, key: &Key, state: ElementState) {
-			self.callbacks.get_mut(key)
-				.map(|callbacks| {
-					match state {
-						ElementState::Pressed  => (callbacks.on_press)(),
-						ElementState::Released => (callbacks.on_release)()
-					}
-				});
 		}
 	}
 
@@ -61,28 +51,6 @@ pub mod key_map {
 		impl Default for KeyMap {
 			fn default() -> Self {
 				Self::new()
-			}
-		}
-	}
-
-	struct Callbacks {
-		on_press: Box<dyn FnMut() + Send>,
-		on_release: Box<dyn FnMut() + Send>,
-	}
-
-
-	impl Default for Callbacks {
-		fn default() -> Self {
-			Self::empty()
-		}
-	}
-
-	impl Callbacks {
-		fn empty () -> Self {
-			fn empty() {}
-			Self {
-				on_press: Box::new(empty),
-				on_release: Box::new(empty),
 			}
 		}
 	}
