@@ -38,6 +38,6 @@ fn main () {
 //      		- registering pipelines
 //      		- creation of bind group layout
 //      		- creation of bind groups
-// TODO : Add Include files to shader manager
+// TODO (Finished) : Add Include files to shader manager
 // 		- read the shader input and check for any `#include "<file_name>"` fragments
 // 		- read the file indicated by that name and include it in that location
