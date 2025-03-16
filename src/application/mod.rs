@@ -190,6 +190,15 @@ impl winit::application::ApplicationHandler for App {
 		}
 	}
 
+	fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+		todo!();
+	}
+
 	fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
 		let inner = self.inner.as_mut().unwrap();
 		match event {
