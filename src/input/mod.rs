@@ -92,18 +92,30 @@ pub mod mouse_map {
 		}
 
 		// Cursor 
+		pub fn mouse_position (&self) -> [f64;2] {
+			self.position
+		}
+
 		pub fn handle_cursor_movement(&mut self, position: PhysicalPosition<f64>) {
 			self.position = [position.x, position.y];
 		}
 
 		// Scroll
-		pub fn handle_mouse_wheel(&mut self, delta: MouseScrollDelta) {
+		pub fn scroll_level(&self) -> [f64;2] {
+			self.scroll_level
+		}
+
+		pub fn handle_mouse_scroll(&mut self, delta: MouseScrollDelta) {
 			const PIXELS_PER_LINE: f64 = 10.;
 			let [x_s, y_s] = self.scroll_level;
 			match delta {
 				MouseScrollDelta::LineDelta(x_d, y_d) => self.scroll_level = [x_s + PIXELS_PER_LINE * x_d as f64, y_s + PIXELS_PER_LINE * y_d as f64],
 				MouseScrollDelta::PixelDelta(delta) => self.scroll_level = [x_s + delta.x, y_s + delta.y],
 			}
+		}
+
+		pub fn handle_raw_scroll(&mut self, delta: MouseScrollDelta) {
+			self.raw_scroll_callbacks.iter_mut().for_each(|(_, callback)| callback(&delta));
 		}
 
 		pub fn register_raw_scroll_callback<F: FnMut(&MouseScrollDelta) + Send + 'static>

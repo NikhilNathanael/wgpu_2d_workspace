@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use mouse_map::MouseMap;
 use wgpu::*;
 
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
-use winit::event::WindowEvent;
+use winit::event::{DeviceEvent, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 use super::wgpu_context::*;
@@ -38,7 +39,7 @@ struct AppInner {
 	scene: (PointRenderer, TriangleListRenderer, CircleRenderer),
 	shader_manager: ShaderManager,
 	timer: Timer,
-	key_map: KeyMap,
+	input: Input,
 }
 
 impl AppInner {
@@ -49,7 +50,7 @@ impl AppInner {
 		let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
 
 		// Create key map
-		let key_map = KeyMap::new();
+		let input = Input::new();
 		
 		// Create WGPU context
 		let render_context = WGPUContext::new(Arc::clone(&window));
@@ -117,7 +118,7 @@ impl AppInner {
 			scene: (points, triangle, circles),
 			shader_manager,
 			timer,
-			key_map,
+			input,
 		}
 	}
 
@@ -156,10 +157,10 @@ impl AppInner {
 
 		let mut move_dir = [0., 0.];
 
-		if self.key_map.is_pressed(key_char!("w")) {move_dir[1] -= delta * 500.;}
-		if self.key_map.is_pressed(key_char!("s")) {move_dir[1] += delta * 500.;}
-		if self.key_map.is_pressed(key_char!("a")) {move_dir[0] -= delta * 500.;}
-		if self.key_map.is_pressed(key_char!("d")) {move_dir[0] += delta * 500.;}
+		if self.input.key_map.is_pressed(key_char!("w")) {move_dir[1] -= delta * 500.;}
+		if self.input.key_map.is_pressed(key_char!("s")) {move_dir[1] += delta * 500.;}
+		if self.input.key_map.is_pressed(key_char!("a")) {move_dir[0] -= delta * 500.;}
+		if self.input.key_map.is_pressed(key_char!("d")) {move_dir[0] += delta * 500.;}
 
 		if move_dir != [0., 0.] {
 			self.scene.0.points_mut().iter_mut().for_each(|Point {position, ..}| {
@@ -168,10 +169,14 @@ impl AppInner {
 			self.scene.0.update_points_buffer(&self.render_context);
 		};
 
-		// self.scene.2.rects_mut().iter_mut().for_each(|CenterRect{rotation, ..}| {
-		// 	*rotation += delta;
-		// });
-		// self.scene.2.update_rects(&self.render_context);
+		self.scene.2.circles_mut()
+			.iter_mut()
+			.for_each(|Circle{position,..}| {
+				let scroll = self.input.mouse_map.scroll_level();
+				let mouse_position = self.input.mouse_map.mouse_position();
+				*position = [(mouse_position[0] + scroll[0]) as f32, (mouse_position[1] + scroll[1]) as f32];
+			});
+		self.scene.2.update_circles(&self.render_context);
 	}
 }
 
@@ -179,7 +184,7 @@ impl winit::application::ApplicationHandler for App {
 	fn resumed(&mut self, event_loop: &ActiveEventLoop) {
 		match &self.inner {
 			None => {
-		// Create window
+				// Create window
 				let window = event_loop.create_window(
 					Window::default_attributes()
 					.with_title(self.title.to_owned())
@@ -196,7 +201,12 @@ impl winit::application::ApplicationHandler for App {
         device_id: winit::event::DeviceId,
         event: winit::event::DeviceEvent,
     ) {
-		todo!();
+		let inner = self.inner.as_mut().unwrap();
+		match event {
+			DeviceEvent::MouseMotion{delta} => inner.input.mouse_map.handle_raw_mouse_movement(delta),
+			DeviceEvent::MouseWheel{delta} => inner.input.mouse_map.handle_raw_scroll(delta),
+			_ => (),
+		}
 	}
 
 	fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -210,8 +220,17 @@ impl winit::application::ApplicationHandler for App {
 				match event.logical_key {
 					Key::Named(NamedKey::Escape) => event_loop.exit(),
 					Key::Named(NamedKey::Space) => inner.shader_manager.reload(),
-					x => inner.key_map.handle_key(x, event.state),
+					x => inner.input.key_map.handle_key(x, event.state),
 				}
+			}
+			WindowEvent::CursorMoved{position,..} => {
+				inner.input.mouse_map.handle_cursor_movement(position);
+			}
+			WindowEvent::MouseWheel{delta,..} => {
+				inner.input.mouse_map.handle_mouse_scroll(delta);
+			}
+			WindowEvent::MouseInput{button, state, ..} => {
+				inner.input.mouse_map.handle_button(button, state);
 			}
 			WindowEvent::Resized(new_size) => {
 				inner.render_context.resize(new_size);
@@ -221,31 +240,23 @@ impl winit::application::ApplicationHandler for App {
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
-				// Redraw the application.
-				//
-				// It's preferable for applications that do not render continuously to render in
-				// this event rather than in AboutToWait, since rendering in here allows
-				// the program to gracefully handle redraws requested by the OS.
-
-				// Draw.
-
-				// Queue a RedrawRequested event.
-				//
-				// You only need to call this if you've determined that you need to redraw in
-				// applications which do not always need to. Applications that redraw continuously
-				// can render here instead.
 				inner.render_frame();
-			}
-			WindowEvent::CursorMoved{position: mouse_position,..} => {
-				inner.scene.2.circles_mut()
-					.iter_mut()
-					.for_each(|Circle{position,..}| 
-						 *position = [mouse_position.x as f32, mouse_position.y as f32]
-					);
-				inner.scene.2.update_circles(&inner.render_context);
 			}
 			_ => (),
 		}
 	}		
 }
 
+struct Input {
+	key_map: KeyMap,
+	mouse_map: MouseMap,
+}
+
+impl Input {
+	pub fn new () -> Self{
+		Self {
+			key_map: KeyMap::new(),
+			mouse_map: MouseMap::new(),
+		}
+	}
+}
