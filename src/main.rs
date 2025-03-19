@@ -41,3 +41,7 @@ fn main () {
 // TODO (Finished) : Add Include files to shader manager
 // 		- read the shader input and check for any `#include "<file_name>"` fragments
 // 		- read the file indicated by that name and include it in that location
+// TODO (Finished) : Add Transparency blending
+// TODO : Add derive macros for Buffer data
+// 		- One macro for Vertex data
+// 		- One macro for Uniform data

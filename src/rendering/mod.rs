@@ -1,27 +1,12 @@
 mod point {
 	use crate::wgpu_context::*;
 	use wgpu::*;
+	use super::Uniform;
 
 	use crate::shader_manager::*;
 
 	use bytemuck::{Zeroable, Pod};
 	use crate::vertex_buffer_layout;
-
-	#[repr(C)]
-	#[derive(Zeroable, Pod, Clone, Copy)]
-	pub struct Uniform {
-		pub size: [f32;2],
-	}
-
-	impl BufferData for Uniform {
-		type Buffers = WGPUBuffer;
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			Self::Buffers::new_uniform(std::mem::size_of::<Self>() as u64, context)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.write_data(bytemuck::bytes_of(self), context);
-		}
-	}
 
 	#[repr(C)]
 	#[derive(Zeroable, Pod, Clone, Copy, Debug)]
@@ -90,7 +75,18 @@ mod point {
 					targets: Box::new([
 						Some(ColorTargetState{
 							format: context.config().format,
-							blend: None,
+							blend: Some(BlendState{
+								color: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+								alpha: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+							}),
 							write_mask: ColorWrites::ALL,
 						})
 					]),
@@ -112,7 +108,7 @@ mod point {
 			let points = BufferAndData::new(points, context);
 
 			let uniform = Uniform {
-				size: [context.config().width as f32, context.config().height as f32],
+				screen_size: [context.config().width as f32, context.config().height as f32],
 			};
 			let uniform = BufferAndData::new(uniform, context);
 			context.queue().submit([]);
@@ -136,7 +132,7 @@ mod point {
 		}
 
 		pub fn update_size(&mut self, context: &WGPUContext) {
-			self.uniform.data.size = [context.config().width as f32, context.config().height as f32];
+			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
 			self.uniform.update_buffer(context);
 		}
 
@@ -190,8 +186,8 @@ mod point {
 }
 
 mod triangle {
-	use bytemuck::{Pod, Zeroable};
 	use crate::wgpu_context::*;
+	use super::Uniform;
 
 	use wgpu::*;
 
@@ -199,22 +195,6 @@ mod triangle {
 
 	use super::point::Point;
 	use crate::vertex_buffer_layout;
-	
-	#[repr(C)]
-	#[derive(Debug, Clone, Copy, Zeroable, Pod)]
-	pub struct Uniform {
-		screen_size: [f32;2],
-	}
-
-	impl BufferData for Uniform {
-		type Buffers = WGPUBuffer;
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			WGPUBuffer::new_uniform(std::mem::size_of::<Self>() as u64, context)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.write_data(bytemuck::bytes_of(self), context);
-		}
-	}
 
 	pub struct Triangle {
 		pub points: [Point;3]
@@ -297,7 +277,18 @@ mod triangle {
 					targets: Box::new([
 						Some(ColorTargetState{
 							format: context.config().format,
-							blend: None,
+							blend: Some(BlendState{
+								color: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+								alpha: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+							}),
 							write_mask: ColorWrites::ALL,
 						})
 					]),
@@ -362,30 +353,14 @@ mod triangle {
 }
 
 mod rect {
-	use bytemuck::{Pod, Zeroable};
 	use crate::wgpu_context::*;
+	use super::Uniform;
 
 	use wgpu::*;
 
 	use crate::shader_manager::*;
 
 	use crate::vertex_buffer_layout;
-	
-	#[repr(C)]
-	#[derive(Debug, Clone, Copy, Zeroable, Pod)]
-	pub struct Uniform {
-		screen_size: [f32;2],
-	}
-
-	impl BufferData for Uniform {
-		type Buffers = WGPUBuffer;
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			WGPUBuffer::new_uniform(std::mem::size_of::<Self>() as u64, context)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.write_data(bytemuck::bytes_of(self), context);
-		}
-	}
 
 	pub struct CenterRect {
 		pub color: [f32;4],
@@ -477,7 +452,18 @@ mod rect {
 					targets: Box::new([
 						Some(ColorTargetState{
 							format: context.config().format,
-							blend: None,
+							blend: Some(BlendState{
+								color: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+								alpha: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+							}),
 							write_mask: ColorWrites::ALL,
 						})
 					]),
@@ -554,29 +540,13 @@ mod rect {
 mod circle {
 	use wgpu::*;
 	use crate::wgpu_context::{BufferAndData, BufferData, WGPUBuffer, WGPUContext};
-	use bytemuck::{Pod, Zeroable};
-	use std::mem::size_of;
-
+	use super::Uniform;
 	use crate::shader_manager::*;
-
-	use crate::shader_manager::ShaderManager;
 	use crate::vertex_buffer_layout;
 
-	#[derive(Pod, Zeroable, Clone, Copy)]
-	#[repr(C)]
-	pub struct Uniform {
-		screen_size: [f32;2],
-	}
-	
-	impl BufferData for Uniform {
-		type Buffers = WGPUBuffer;
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			WGPUBuffer::new_uniform(size_of::<Self>() as u64, context)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.write_data(bytemuck::bytes_of(self), context);
-		}
-	}
+	use std::mem::size_of;
+
+	use bytemuck::{Pod, Zeroable};
 
 	#[derive(Pod, Zeroable, Clone, Copy)]
 	#[repr(C)]
@@ -666,7 +636,18 @@ mod circle {
 					targets: Box::new([
 						Some(ColorTargetState{
 							format: context.config().format,
-							blend: None,
+							blend: Some(BlendState{
+								color: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+								alpha: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+							}),
 							write_mask: ColorWrites::ALL,
 						})
 					]),
@@ -736,6 +717,24 @@ mod circle {
 		pub fn update_circles(&mut self, context: &WGPUContext) {
 			self.circles.update_buffer(context);
 		}
+	}
+}
+
+use bytemuck::{Pod, Zeroable};
+#[derive(Pod, Zeroable, Clone, Copy)]
+#[repr(C)]
+pub struct Uniform {
+	screen_size: [f32;2],
+}
+
+use crate::wgpu_context::{BufferData, WGPUBuffer, WGPUContext};
+impl BufferData for Uniform {
+	type Buffers = WGPUBuffer;
+	fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
+		WGPUBuffer::new_uniform(size_of::<Self>() as u64, context)
+	}
+	fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
+		buffers.write_data(bytemuck::bytes_of(self), context);
 	}
 }
 
