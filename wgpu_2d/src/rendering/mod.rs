@@ -5,28 +5,16 @@ mod point {
 
 	use crate::shader_manager::*;
 
+	use derive::VertexBufferData;
+
 	use bytemuck::{Zeroable, Pod};
 	use crate::vertex_buffer_layout;
 
 	#[repr(C)]
-	#[derive(Zeroable, Pod, Clone, Copy, Debug)]
+	#[derive(Zeroable, Pod, Clone, Copy, Debug, VertexBufferData)]
 	pub struct Point {
 		pub color: [f32;4],
 		pub position: [f32;2],
-	}
-
-	impl BufferData for Vec<Point> {
-		type Buffers = (WGPUBuffer, WGPUBuffer);
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			(
-				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context),
-				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
-			)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.0.write_iter(self.iter().map(|x| &x.color), context);
-			buffers.1.write_iter(self.iter().map(|x| &x.position), context);
-		}
 	}
 
 	pub struct PointRenderer {
@@ -353,15 +341,19 @@ mod triangle {
 }
 
 mod rect {
-	use crate::wgpu_context::*;
-	use super::Uniform;
+
+	use derive::UniformBufferData;
 
 	use wgpu::*;
 
+	use super::Uniform;
 	use crate::shader_manager::*;
-
+	use crate::wgpu_context::*;
 	use crate::vertex_buffer_layout;
 
+	use bytemuck::{Pod, Zeroable};
+	#[derive(Clone, Copy, Pod, Zeroable, UniformBufferData)]
+	#[repr(C)]
 	pub struct CenterRect {
 		pub color: [f32;4],
 		pub center: [f32;2],
@@ -538,38 +530,21 @@ mod rect {
 }
 
 mod circle {
+	use derive::VertexBufferData;
 	use wgpu::*;
-	use crate::wgpu_context::{BufferAndData, BufferData, WGPUBuffer, WGPUContext};
+	use crate::wgpu_context::{BufferAndData, WGPUContext};
 	use super::Uniform;
 	use crate::shader_manager::*;
 	use crate::vertex_buffer_layout;
 
-	use std::mem::size_of;
-
 	use bytemuck::{Pod, Zeroable};
 
-	#[derive(Pod, Zeroable, Clone, Copy)]
+	#[derive(Pod, Zeroable, Clone, Copy, VertexBufferData)]
 	#[repr(C)]
 	pub struct Circle {
 		pub color: [f32;4],
 		pub position: [f32;2],
 		pub radius: f32,
-	}
-
-	impl BufferData for Vec<Circle> {
-		type Buffers = (WGPUBuffer, WGPUBuffer, WGPUBuffer);
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			(
-				WGPUBuffer::new_vertex((size_of::<[f32;4]>() * self.len()) as u64, context),
-				WGPUBuffer::new_vertex((size_of::<[f32;2]>() * self.len()) as u64, context),
-				WGPUBuffer::new_vertex((size_of::<f32>()     * self.len()) as u64, context),
-			)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.0.write_iter(self.iter().map(|x| &x.color   ), context);
-			buffers.1.write_iter(self.iter().map(|x| &x.position), context);
-			buffers.2.write_iter(self.iter().map(|x| &x.radius  ), context);
-		}
 	}
 
 	pub struct CircleRenderer {
@@ -720,28 +695,289 @@ mod circle {
 	}
 }
 
+mod texture {
+	use derive::UniformBufferData;
+	use crate::rendering::{CenterRect, Uniform};
+	use crate::wgpu_context::{WGPUContext, BufferAndData};
+	use crate::shader_manager::{RenderPipelineDescriptorTemplate, VertexStateTemplate, FragmentStateTemplate, ShaderManager};
+	use wgpu::*;
+	use bytemuck::{Pod, Zeroable};
+
+
+	pub struct TextureRenderer {
+		rect: BufferAndData<CenterRect>,
+		uniform: BufferAndData<Uniform>,
+		texture: Texture,
+		view: TextureView,
+		sampler: Sampler,
+		bind_group: BindGroup,
+	}
+
+	impl TextureRenderer {
+		pub fn new (context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+			let uniform = BufferAndData::new(Uniform {
+				screen_size: [context.config().width as f32, context.config().height as f32],
+			}, context);
+			let rect = BufferAndData::new(CenterRect{
+				color: [0., 0., 0., 1.],
+				center: [400., 300.],
+				size: [300., 250.], 
+				rotation: 0.,
+			}, context);
+
+			// Texture data
+			let x: [u8;4] = [255, 0, 0, 255];
+			let y: [u8;4] = [255, 255, 0, 255];
+			let b: [u8;4] = [0, 0, 255, 255];
+			let texture_data = &[
+				[b, x, x, x, x,],
+				[x, y, y, y, x,],
+				[x, y, x, x, x,],
+				[x, y, y, x, x,],
+				[x, y, x, x, x,],
+				[x, y, x, x, x,],
+				[x, x, x, x, x,],
+			];
+
+			println!("{:?}", bytemuck::cast_slice::<_, u8>(texture_data));
+
+			// Create Texture
+			let texture = context.device().create_texture(&TextureDescriptor{
+				label: Some("Test Texture"),
+				size: Extent3d{height: texture_data.len() as u32, width: texture_data[0].len() as u32, depth_or_array_layers: 1},
+				mip_level_count: 1,
+				sample_count: 1,
+				dimension: TextureDimension::D2,
+				format: TextureFormat::Rgba8Unorm,
+				usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+				view_formats: &[TextureFormat::Rgba8Unorm],
+			});
+
+			let texture_view = texture.create_view(&TextureViewDescriptor{
+				label: Some("Texture View"),
+				format: None,
+				dimension: None,
+				usage: None,
+				aspect: TextureAspect::All,
+				base_mip_level: 0,
+				mip_level_count: None,
+				base_array_layer: 0,
+				array_layer_count: None,
+			});
+
+			// Copy data to texture
+			context.queue().write_texture(
+				TexelCopyTextureInfo{
+					texture: &texture,
+					mip_level: 0,
+					origin: Origin3d{x: 0, y: 0, z: 0},
+					aspect: TextureAspect::All,
+				},
+				bytemuck::cast_slice(texture_data),
+				TexelCopyBufferLayout {
+					offset: 0,
+					bytes_per_row: Some((std::mem::size_of_val(texture_data) / texture_data.len()) as u32),
+					rows_per_image: Some(texture_data.len() as u32),
+				},
+				Extent3d{
+					width: texture_data[0].len() as u32, 
+					height: texture_data.len() as u32, 
+					depth_or_array_layers: 1
+				},
+			);
+
+			// Create Sampler
+			let sampler = context.device().create_sampler(&SamplerDescriptor{
+				label: Some("Test Sampler"),
+				address_mode_u:AddressMode::Repeat,
+				address_mode_v:AddressMode::Repeat,
+				address_mode_w:AddressMode::Repeat,
+				mag_filter:FilterMode::Nearest,
+				min_filter:FilterMode::Linear,
+				mipmap_filter:FilterMode::Nearest,
+				lod_min_clamp:0.,
+				lod_max_clamp:0.,
+				compare:None,
+				anisotropy_clamp:1,
+				border_color:None,
+			});
+
+			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
+				label: Some("Texture bind group layout"),
+				entries: &[
+					BindGroupLayoutEntry {
+						binding: 0,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Buffer{
+							ty: BufferBindingType::Uniform,
+							has_dynamic_offset: false,
+							min_binding_size: None,
+						},
+						count: None,
+					},
+					BindGroupLayoutEntry {
+						binding: 1,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Buffer{
+							ty: BufferBindingType::Uniform,
+							has_dynamic_offset: false,
+							min_binding_size: None,
+						},
+						count: None,
+					},
+					BindGroupLayoutEntry {
+						binding: 2,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Texture{
+							sample_type: TextureSampleType::Float{filterable: true},
+							view_dimension: TextureViewDimension::D2,
+							multisampled: false,
+						},
+						count: None,
+					},
+					BindGroupLayoutEntry {
+						binding: 3,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Sampler(SamplerBindingType::Filtering),
+						count: None,
+					},
+				],
+			});
+
+			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
+				label: Some("Texture pipeline layout"),
+				bind_group_layouts: &[
+					&bind_group_layout,
+				],
+				push_constant_ranges: &[],
+			});
+			
+			let render_pipeline_template = RenderPipelineDescriptorTemplate{
+				label: Some("Texture quad Pipeline"),
+				layout: Some(pipeline_layout),
+				vertex: VertexStateTemplate{
+					module_path: "texture.wgsl",
+					entry_point: None,
+					buffers: &[],
+				},
+				primitive: PrimitiveState {
+					topology: PrimitiveTopology::TriangleStrip,
+					..Default::default()
+				},
+				depth_stencil: None,
+				multisample: Default::default(),
+				fragment: Some(FragmentStateTemplate{
+					module_path: "texture.wgsl",
+					entry_point: None,
+					targets: Box::new([
+						Some(ColorTargetState{
+							format: context.config().format,
+							blend: Some(BlendState{
+								color: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+								alpha: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+							}),
+							write_mask: ColorWrites::ALL,
+						})
+					]),
+				}),
+				multiview: None,
+				cache: None,
+			};
+
+			shader_manager.register_render_pipeline("texture", render_pipeline_template);
+
+			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
+				label: Some("Texture bind group"),
+				layout: &bind_group_layout,
+				entries: &[
+					BindGroupEntry{
+						binding: 0,
+						resource: uniform.buffers.as_entire_binding(),
+					},
+					BindGroupEntry{
+						binding: 1,
+						resource: rect.buffers.as_entire_binding(),
+					},
+					BindGroupEntry{
+						binding: 2,
+						resource: BindingResource::TextureView(&texture_view),
+					},
+					BindGroupEntry{
+						binding: 3,
+						resource: BindingResource::Sampler(&sampler),
+					},
+				],
+			});
+
+			Self {
+				uniform, 
+				rect,
+				texture,
+				view: texture_view,
+				sampler,
+				bind_group,
+			}
+		}
+
+		pub fn set_uniform(&mut self, context: &WGPUContext) {
+			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
+			self.uniform.update_buffer(context);
+		}
+
+		pub fn rect_mut(&mut self) -> &mut CenterRect {
+			&mut self.rect.data
+		}
+
+		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
+			let mut encoder = context.get_encoder();
+			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
+				label: None,
+				color_attachments: &[
+					Some(RenderPassColorAttachment{
+						view: target,
+						resolve_target: None,
+						ops: Operations {
+							load: LoadOp::Load,
+							store: StoreOp::Store,
+						}
+					})
+				],
+				..Default::default()
+			});
+
+			let pipeline = shader_manager.get_render_pipeline("texture", context);
+
+			render_pass.set_pipeline(pipeline);
+			render_pass.set_bind_group(0, &self.bind_group, &[]);
+			render_pass.draw(0..4, 0..1);
+
+			std::mem::drop(render_pass);
+			context.queue().submit([encoder.finish()]);
+		}
+	}
+}
+
+use derive::UniformBufferData;
 use bytemuck::{Pod, Zeroable};
-#[derive(Pod, Zeroable, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Copy, UniformBufferData)]
 #[repr(C)]
 pub struct Uniform {
 	screen_size: [f32;2],
 }
 
-use crate::wgpu_context::{BufferData, WGPUBuffer, WGPUContext};
-impl BufferData for Uniform {
-	type Buffers = WGPUBuffer;
-	fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-		WGPUBuffer::new_uniform(size_of::<Self>() as u64, context)
-	}
-	fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-		buffers.write_data(bytemuck::bytes_of(self), context);
-	}
-}
-
 pub use point::*;
 pub use triangle::*;
-// pub use rect::*;
+pub use rect::*;
 pub use circle::*;
+pub use texture::*;
 #[macro_export]
 macro_rules! vertex_buffer_layout {
 	($(($stridetype: ty, $mode: ident, $attributes: expr)),+ $(,)?) => {

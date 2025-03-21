@@ -36,7 +36,7 @@ impl App {
 struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
-	scene: (PointRenderer, TriangleListRenderer, CircleRenderer),
+	scene: (PointRenderer, TriangleListRenderer, CircleRenderer, TextureRenderer),
 	shader_manager: ShaderManager,
 	timer: Timer,
 	input: Input,
@@ -86,20 +86,6 @@ impl AppInner {
 
 		let mut rng = rand::rng();
 
-		//  - Rectangles
-		// let rects = (0..50).map(|_|
-		// 	CenterRect{
-		// 		color: [rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), 1.],
-		// 		center: [
-		// 			rng.random_range(0.0..1600.),
-		// 			rng.random_range(0.0..1200.),
-		// 		],
-		// 		size: [rng.random_range(50.0..200.0), rng.random_range(50.0..200.0)],
-		// 		rotation: rng.random_range(0.0..4.0),
-		// 	}
-		// ).collect();
-		// let rects = RectangleRenderer::new(rects, &render_context, &shader_manager);
-
 		//  - Circles
 		let circles = vec![
 			Circle {
@@ -112,10 +98,13 @@ impl AppInner {
 		];
 		let circles = CircleRenderer::new(circles, &render_context, &shader_manager);
 
+		// Texture Renderer
+		let texture_renderer = TextureRenderer::new(&render_context, &shader_manager);
+
 		Self {
 			window,
 			render_context,
-			scene: (points, triangle, circles),
+			scene: (points, triangle, circles, texture_renderer),
 			shader_manager,
 			timer,
 			input,
@@ -126,7 +115,6 @@ impl AppInner {
 		// log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
 		// self.timer.reset();
 		self.update_scene();
-
 
 		let surface_texture = self.render_context.surface().get_current_texture()
 			.expect("Could not get current texture");
@@ -146,6 +134,9 @@ impl AppInner {
 		self.scene.0.render(&texture_view, &self.render_context, &self.shader_manager);
 		self.scene.1.render(&texture_view, &self.render_context, &self.shader_manager);
 		self.scene.2.render(&texture_view, &self.render_context, &self.shader_manager);
+		self.scene.3.render(&texture_view, &self.render_context, &self.shader_manager);
+
+		// Texture Testing
 		
 		surface_texture.present();
 		self.window.request_redraw();
@@ -237,6 +228,7 @@ impl winit::application::ApplicationHandler for App {
 				inner.scene.0.update_size(&inner.render_context);
 				inner.scene.1.set_uniform(&inner.render_context);
 				inner.scene.2.set_uniform(&inner.render_context);
+				inner.scene.3.set_uniform(&inner.render_context);
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
