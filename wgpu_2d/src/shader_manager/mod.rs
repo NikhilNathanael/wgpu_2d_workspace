@@ -46,7 +46,7 @@ use std::collections::hash_map::Entry;
 
 enum Include<'a> {
 	Absolute(&'a str),
-	Relative(&'a str),
+	// Relative(&'a str),
 }
 
 pub struct ShaderManager {
@@ -88,7 +88,6 @@ impl ShaderManager {
 					includes.extend_from_slice(include_includes);
 					source.push_str(include_source);
 				}
-				_ => unimplemented!(),
 			}
 			line.clear();
 		}

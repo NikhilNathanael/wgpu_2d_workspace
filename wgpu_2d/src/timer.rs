@@ -17,6 +17,7 @@ impl Timer {
 		self.last_reset = Instant::now();
 	}
 
+	#[allow(dead_code)]
 	pub fn elapsed_start(&self) -> f32 {
 		self.start_time.elapsed().as_secs_f32()
 	}

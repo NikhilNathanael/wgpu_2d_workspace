@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //#![windows_subsystem = "windows"]
 mod rendering;
 mod shader_manager;

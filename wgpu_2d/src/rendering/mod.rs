@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 mod point {
 	use crate::wgpu_context::*;
 	use wgpu::*;
@@ -838,7 +839,6 @@ mod scene_manager {
 	use super::*;
 	use crate::wgpu_context::{WGPUContext, BufferAndData};
 	use crate::shader_manager::ShaderManager;
-	use rand::Rng;
 
 	use wgpu::*;
 
