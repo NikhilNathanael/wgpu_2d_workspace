@@ -27,7 +27,10 @@ pub mod key_map {
 		pub fn handle_key (&mut self, key: Key, state: ElementState) {
 			// Call all callbacks
 			self.callbacks.iter_mut().for_each(|(_, callback)| callback(&key, state));
-			self.pressed_keys.insert(key);
+			match state {
+				ElementState::Pressed => self.pressed_keys.insert(key),
+				ElementState::Released => self.pressed_keys.remove(&key),
+			};
 		}
 
 		pub fn register_callback<F: FnMut(&Key, ElementState) + 'static + Send> (&mut self, label: &str, callback: F) {
