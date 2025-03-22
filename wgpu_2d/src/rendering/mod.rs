@@ -445,6 +445,66 @@ mod texture {
 	use crate::shader_manager::{RenderPipelineDescriptorTemplate, VertexStateTemplate, FragmentStateTemplate, ShaderManager};
 	use wgpu::*;
 
+	struct TextureData {
+		data: Vec<[f32; 4]>,
+		rows: usize,
+		columns: usize,
+	}
+
+	// impl TextureData {
+	// 	pub fn new (data: Vec<[f32;4]>, rows: usize, columns: usize) -> Self {
+	// 		assert!(rows * columns == data.len());
+	// 		Self {
+	// 			data,
+	// 			rows, 
+	// 			columns,
+	// 		}
+	// 	}
+
+	// 	pub fn generate_next_mip(&self) -> Option<Self> {
+	// 		todo!();
+	// 		// if self.rows == 1 && self.columns == 1 {
+	// 		// 	return None;
+	// 		// }
+	// 		// let mip_rows = std::cmp::max(self.rows / 2, 1);
+	// 		// let mip_columns = std::cmp::max(self.columns / 2, 1);
+	// 		// let mut output = Vec::new();
+
+	// 		// for y in 0..mip_rows {
+	// 		// 	for x in 0..mip_columns {
+	// 		// 		// uv of next mip
+	// 		// 		let u = (x as f32 + 0.5) / mip_columns;
+	// 		// 		let v = (y as f32 + 0.5) / mip_rows;
+
+	// 		// 		let au = (u * self.rows - 0.5);
+	// 		// 		let av = (v * self.columns - 0.5);
+ 
+	// 		// 		// compute the src top left texel coord (not texcoord)
+	// 		// 		let tx = au;
+	// 		// 		let ty = av;
+
+	// 		// 		// compute the mix amounts between pixels
+	// 		// 		let t1 = au % 1;
+	// 		// 		let t2 = av % 1;
+	// 		// 	}
+	// 		// }
+	// 	}
+	// }
+
+	// impl std::ops::Index<(f32, f32)> for TextureData {
+	// 	type Output = [[f32;4]];
+	// 	fn index (&self, index: usize) -> &Self::Output {
+	// 		&self.data[(index * self.columns)..((index + 1) * self.columns)]
+	// 	}
+	// }
+
+	impl std::ops::Index<usize> for TextureData {
+		type Output = [[f32;4]];
+		fn index (&self, index: usize) -> &Self::Output {
+			&self.data[(index * self.columns)..((index + 1) * self.columns)]
+		}
+	}
+
 	pub struct TextureRenderer {
 		rect: BufferAndData<CenterRect>,
 		texture: Texture,
@@ -457,8 +517,8 @@ mod texture {
 		pub fn new (uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let rect = BufferAndData::new(CenterRect{
 				color: [0., 0., 0., 1.],
-				center: [400., 300.],
-				size: [300., 250.], 
+				center: [4.5, 3.5],
+				size: [1.0, 1.0], 
 				rotation: 0.,
 			}, context);
 
@@ -527,7 +587,7 @@ mod texture {
 				address_mode_u:AddressMode::Repeat,
 				address_mode_v:AddressMode::Repeat,
 				address_mode_w:AddressMode::Repeat,
-				mag_filter:FilterMode::Nearest,
+				mag_filter:FilterMode::Linear,
 				min_filter:FilterMode::Linear,
 				mipmap_filter:FilterMode::Nearest,
 				lod_min_clamp:0.,
@@ -826,10 +886,10 @@ mod scene_manager {
 			});
 
 			render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+			self.scene.3.render(&mut render_pass, &context, &shader_manager);
 			self.scene.0.render(&mut render_pass, &context, &shader_manager);
 			self.scene.1.render(&mut render_pass, &context, &shader_manager);
 			self.scene.2.render(&mut render_pass, &context, &shader_manager);
-			self.scene.3.render(&mut render_pass, &context, &shader_manager);
 
 			std::mem::drop(render_pass);
 			context.queue().submit([encoder.finish()]);

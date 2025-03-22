@@ -93,7 +93,9 @@ impl AppInner {
 				*position = [(mouse_position[0] + scroll[0]) as f32, (mouse_position[1] + scroll[1]) as f32];
 			});
 		scene.2.update_circles(&self.render_context);
-		scene.3.rect_mut().rotation = self.input.mouse_map.scroll_level()[1] as f32;
+		scene.3.rect_mut().rotation = self.input.mouse_map.scroll_level()[1] as f32 * 0.01;
+		scene.3.rect_mut().center[0] += move_dir[0] / 500.;
+		scene.3.rect_mut().center[1] += move_dir[1] / 500.;
 		scene.3.update_rect(&self.render_context);
 	}
 }
@@ -151,7 +153,7 @@ impl winit::application::ApplicationHandler for App {
 				inner.input.mouse_map.handle_button(button, state);
 			}
 			WindowEvent::Resized(new_size) => {
-				inner.render_context.resize(new_size);
+				inner.render_context.resize(winit::dpi::PhysicalSize::new(8, 8));
 				inner.scene_manager.update_uniform(&inner.render_context);
 				inner.window.request_redraw();
 			},

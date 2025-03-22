@@ -24,7 +24,7 @@ fn v_main (rect: Rect, @builtin(vertex_index) v_id: u32) -> V2F {
 		vec2<f32>(cos(rect.rotation), sin(rect.rotation)),
 		vec2<f32>(-sin(rect.rotation), cos(rect.rotation)),
 	);
-	let pos = quad_strip[v_id] * rect.size * rotation_matrix + rect.center;
+	let pos = quad_strip[v_id] * rect.size / 2. * rotation_matrix + rect.center;
 
 	let clip_space = pos / (uni.screen_size) * 2. * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
 
