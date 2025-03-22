@@ -7,9 +7,9 @@ struct Rect {
 	@location(3) rotation: f32,
 }
 
-@group(0) @binding(1) var<uniform> rect: Rect;
-@group(0) @binding(2) var tex: texture_2d<f32>;
-@group(0) @binding(3) var samp: sampler;
+@group(1) @binding(0) var<uniform> rect: Rect;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+@group(1) @binding(2) var samp: sampler;
 
 struct V2F {
 	@builtin(position) position: vec4<f32>,

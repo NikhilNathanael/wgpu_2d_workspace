@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use mouse_map::MouseMap;
-use wgpu::*;
 
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
@@ -16,8 +15,6 @@ use crate::rendering::*;
 use crate::timer::Timer;
 
 use crate::key_char;
-
-use rand::Rng;
 
 pub struct App{
 	title: &'static str,
@@ -118,8 +115,8 @@ impl winit::application::ApplicationHandler for App {
 
 	fn device_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
         event: winit::event::DeviceEvent,
     ) {
 		let inner = self.inner.as_mut().unwrap();

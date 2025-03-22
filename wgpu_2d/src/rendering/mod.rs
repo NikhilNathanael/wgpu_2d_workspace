@@ -19,30 +19,13 @@ mod point {
 
 	pub struct PointRenderer {
 		points: BufferAndData<Vec<Point>>,
-		uniform: BufferAndData<Uniform>,
-		bind_group: BindGroup,
 	}
 	
 	impl PointRenderer {
-		pub fn new (points: Vec<Point>, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
-			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
-				label: Some("point renderer bind group layout 1"),
-				entries : &[
-					BindGroupLayoutEntry {
-						binding: 0,
-						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-						ty: BindingType::Buffer {
-							ty: BufferBindingType::Uniform,
-							has_dynamic_offset: false,
-							min_binding_size:None
-						},
-						count: None,
-					}
-				],
-			});
+		pub fn new (points: Vec<Point>, uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
 				label: Some("Points pipeline layout"),
-				bind_group_layouts: &[&bind_group_layout],
+				bind_group_layouts: &[&uniform_bind_group_layout],
 				push_constant_ranges: &[]
 			});
 
@@ -94,39 +77,14 @@ mod point {
 			shader_manager.register_render_pipeline("Point Renderer Pipeline", descriptor_template);
 
 			let points = BufferAndData::new(points, context);
-
-			let uniform = Uniform {
-				screen_size: [context.config().width as f32, context.config().height as f32],
-			};
-			let uniform = BufferAndData::new(uniform, context);
-			context.queue().submit([]);
-
-			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
-				label: Some("Points Uniform Buffer"),
-				layout: &shader_manager.get_render_pipeline("Point Renderer Pipeline", context).get_bind_group_layout(0),
-				entries: &[
-					BindGroupEntry{
-						binding: 0,
-						resource: uniform.buffers.as_entire_binding(),
-					}
-				],
-			});
 			
 			Self {
 				points,
-				uniform,
-				bind_group,
 			}
-		}
-
-		pub fn update_size(&mut self, context: &WGPUContext) {
-			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
-			self.uniform.update_buffer(context);
 		}
 
 		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("Point Renderer Pipeline", context));
-			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.points.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.points.buffers.1.slice(..));
 			render_pass.draw(0..(self.points.data.len()) as u32, 0..1);
@@ -183,40 +141,16 @@ mod triangle {
 
 	pub struct TriangleListRenderer {
 		triangles: BufferAndData<Vec<Triangle>>,
-		uniform: BufferAndData<Uniform>,
-		bind_group: BindGroup,
 	}
 
 	impl TriangleListRenderer {
-		pub fn new(data: Vec<Triangle>, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+		pub fn new(data: Vec<Triangle>, uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let triangles = BufferAndData::new(data, context);
-			let uniform = BufferAndData::new(
-				Uniform {
-					screen_size: [context.config().width as f32, context.config().height as f32],
-				}
-				, context
-			);
-
-			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
-				label: None,
-				entries: &[
-					BindGroupLayoutEntry {
-						binding: 0,
-						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-						ty: BindingType::Buffer{
-							ty: BufferBindingType::Uniform,
-							has_dynamic_offset: false,
-							min_binding_size: None,
-						},
-						count: None,
-					}
-				],
-			});
 
 			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
 				label: None,
 				bind_group_layouts: &[
-					&bind_group_layout,
+					&uniform_bind_group_layout,
 				],
 				push_constant_ranges: &[],
 			});
@@ -265,32 +199,13 @@ mod triangle {
 			};
 			shader_manager.register_render_pipeline("triangles", render_pipeline_template);
 
-			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
-				label: None,
-				layout: &bind_group_layout,
-				entries: &[
-					BindGroupEntry{
-						binding: 0,
-						resource: uniform.buffers.as_entire_binding(),
-					},
-				],
-			});
-
 			Self {
 				triangles,
-				uniform,
-				bind_group,
 			}
-		}
-
-		pub fn set_uniform(&mut self, context: &WGPUContext) {
-			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
-			self.uniform.update_buffer(context);
 		}
 
 		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("triangles", context));
-			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.triangles.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.triangles.buffers.1.slice(..));
 			render_pass.draw(0..(self.triangles.data.len() * 3) as u32, 0..1);
@@ -338,40 +253,16 @@ mod rect {
 
 	pub struct RectangleRenderer {
 		rectangles: BufferAndData<Vec<CenterRect>>,
-		uniform: BufferAndData<Uniform>,
-		bind_group: BindGroup,
 	}
 
 	impl RectangleRenderer {
-		pub fn new(data: Vec<CenterRect>, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+		pub fn new(data: Vec<CenterRect>,uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let rectangles = BufferAndData::new(data, context);
-			let uniform = BufferAndData::new(
-				Uniform {
-					screen_size: [context.config().width as f32, context.config().height as f32],
-				}
-				, context
-			);
-
-			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
-				label: None,
-				entries: &[
-					BindGroupLayoutEntry {
-						binding: 0,
-						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-						ty: BindingType::Buffer{
-							ty: BufferBindingType::Uniform,
-							has_dynamic_offset: false,
-							min_binding_size: None,
-						},
-						count: None,
-					}
-				],
-			});
 
 			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
 				label: None,
 				bind_group_layouts: &[
-					&bind_group_layout,
+					&uniform_bind_group_layout,
 				],
 				push_constant_ranges: &[],
 			});
@@ -422,32 +313,13 @@ mod rect {
 			};
 			shader_manager.register_render_pipeline("rects", render_pipeline_template);
 
-			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
-				label: None,
-				layout: &bind_group_layout,
-				entries: &[
-					BindGroupEntry{
-						binding: 0,
-						resource: uniform.buffers.as_entire_binding(),
-					},
-				],
-			});
-
 			Self {
 				rectangles,
-				uniform,
-				bind_group,
 			}
-		}
-
-		pub fn set_uniform(&mut self, context: &WGPUContext) {
-			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
-			self.uniform.update_buffer(context);
 		}
 
 		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("rects", context));
-			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.rectangles.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.rectangles.buffers.1.slice(..));
 			render_pass.set_vertex_buffer(2, self.rectangles.buffers.2.slice(..));
@@ -485,40 +357,16 @@ mod circle {
 
 	pub struct CircleRenderer {
 		circles: BufferAndData<Vec<Circle>>,
-		uniform: BufferAndData<Uniform>,
-		bind_group: BindGroup,
 	}
 
 	impl CircleRenderer {
-		pub fn new(data: Vec<Circle>, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+		pub fn new(data: Vec<Circle>, uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let circles = BufferAndData::new(data, context);
-			let uniform = BufferAndData::new(
-				Uniform {
-					screen_size: [context.config().width as f32, context.config().height as f32],
-				}
-				, context
-			);
-
-			let bind_group_layout = context.device().create_bind_group_layout(&BindGroupLayoutDescriptor{
-				label: None,
-				entries: &[
-					BindGroupLayoutEntry {
-						binding: 0,
-						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-						ty: BindingType::Buffer{
-							ty: BufferBindingType::Uniform,
-							has_dynamic_offset: false,
-							min_binding_size: None,
-						},
-						count: None,
-					}
-				],
-			});
 
 			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
 				label: None,
 				bind_group_layouts: &[
-					&bind_group_layout,
+					&uniform_bind_group_layout,
 				],
 				push_constant_ranges: &[],
 			});
@@ -568,32 +416,13 @@ mod circle {
 			};
 			shader_manager.register_render_pipeline("circle", render_pipeline_template);
 
-			let bind_group = context.device().create_bind_group(&BindGroupDescriptor{
-				label: None,
-				layout: &bind_group_layout,
-				entries: &[
-					BindGroupEntry{
-						binding: 0,
-						resource: uniform.buffers.as_entire_binding(),
-					},
-				],
-			});
-
 			Self {
 				circles,
-				uniform,
-				bind_group,
 			}
-		}
-
-		pub fn set_uniform(&mut self, context: &WGPUContext) {
-			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
-			self.uniform.update_buffer(context);
 		}
 
 		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("circle", context));
-			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.circles.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.circles.buffers.1.slice(..));
 			render_pass.set_vertex_buffer(2, self.circles.buffers.2.slice(..));
@@ -611,16 +440,13 @@ mod circle {
 }
 
 mod texture {
-	use derive::UniformBufferData;
-	use crate::rendering::{CenterRect, Uniform};
+	use crate::rendering::CenterRect;
 	use crate::wgpu_context::{WGPUContext, BufferAndData};
 	use crate::shader_manager::{RenderPipelineDescriptorTemplate, VertexStateTemplate, FragmentStateTemplate, ShaderManager};
 	use wgpu::*;
-	use bytemuck::{Pod, Zeroable};
 
 	pub struct TextureRenderer {
 		rect: BufferAndData<CenterRect>,
-		uniform: BufferAndData<Uniform>,
 		texture: Texture,
 		view: TextureView,
 		sampler: Sampler,
@@ -628,10 +454,7 @@ mod texture {
 	}
 
 	impl TextureRenderer {
-		pub fn new (context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
-			let uniform = BufferAndData::new(Uniform {
-				screen_size: [context.config().width as f32, context.config().height as f32],
-			}, context);
+		pub fn new (uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let rect = BufferAndData::new(CenterRect{
 				color: [0., 0., 0., 1.],
 				center: [400., 300.],
@@ -730,16 +553,6 @@ mod texture {
 					BindGroupLayoutEntry {
 						binding: 1,
 						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-						ty: BindingType::Buffer{
-							ty: BufferBindingType::Uniform,
-							has_dynamic_offset: false,
-							min_binding_size: None,
-						},
-						count: None,
-					},
-					BindGroupLayoutEntry {
-						binding: 2,
-						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
 						ty: BindingType::Texture{
 							sample_type: TextureSampleType::Float{filterable: true},
 							view_dimension: TextureViewDimension::D2,
@@ -748,7 +561,7 @@ mod texture {
 						count: None,
 					},
 					BindGroupLayoutEntry {
-						binding: 3,
+						binding: 2,
 						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
 						ty: BindingType::Sampler(SamplerBindingType::Filtering),
 						count: None,
@@ -759,6 +572,7 @@ mod texture {
 			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
 				label: Some("Texture pipeline layout"),
 				bind_group_layouts: &[
+					uniform_bind_group_layout,
 					&bind_group_layout,
 				],
 				push_constant_ranges: &[],
@@ -812,36 +626,26 @@ mod texture {
 				entries: &[
 					BindGroupEntry{
 						binding: 0,
-						resource: uniform.buffers.as_entire_binding(),
-					},
-					BindGroupEntry{
-						binding: 1,
 						resource: rect.buffers.as_entire_binding(),
 					},
 					BindGroupEntry{
-						binding: 2,
+						binding: 1,
 						resource: BindingResource::TextureView(&texture_view),
 					},
 					BindGroupEntry{
-						binding: 3,
+						binding: 2,
 						resource: BindingResource::Sampler(&sampler),
 					},
 				],
 			});
 
 			Self {
-				uniform, 
 				rect,
 				texture,
 				view: texture_view,
 				sampler,
 				bind_group,
 			}
-		}
-
-		pub fn set_uniform(&mut self, context: &WGPUContext) {
-			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
-			self.uniform.update_buffer(context);
 		}
 
 		pub fn rect_mut(&mut self) -> &mut CenterRect {
@@ -854,7 +658,7 @@ mod texture {
 
 		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("texture", context));
-			render_pass.set_bind_group(0, &self.bind_group, &[]);
+			render_pass.set_bind_group(1, &self.bind_group, &[]);
 			render_pass.draw(0..4, 0..1);
 		}
 	}
@@ -891,7 +695,7 @@ mod scene_manager {
 	use super::*;
 	use crate::wgpu_context::{WGPUContext, BufferAndData};
 	use crate::shader_manager::ShaderManager;
-	use rand::{Rng, thread_rng};
+	use rand::Rng;
 
 	use wgpu::*;
 
@@ -903,6 +707,10 @@ mod scene_manager {
 
 	impl SceneManager {
 		pub fn new (context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+			let uniform = BufferAndData::new(Uniform {
+				screen_size: [context.config().width as f32, context.config().height as f32],
+			}, context);
+
 			let _2d_uniform_bind_group_descriptor = BindGroupLayoutDescriptor{
 				label: Some("Texture bind group layout"),
 				entries: &[
@@ -919,14 +727,23 @@ mod scene_manager {
 				],
 			};
 
-			let uniform = BufferAndData::new(Uniform {
-				screen_size: [context.config().width as f32, context.config().height as f32],
-			}, context);
+			let uniform_bind_group_layout = context.device().create_bind_group_layout(&_2d_uniform_bind_group_descriptor);
+
+			let uniform_bind_group = context.device().create_bind_group(&BindGroupDescriptor{
+				label: Some("Texture bind group"),
+				layout: &uniform_bind_group_layout,
+				entries: &[
+					BindGroupEntry{
+						binding: 0,
+						resource: uniform.buffers.as_entire_binding(),
+					},
+				],
+			});
 
 			// Create scene
 			//  - Points
 			let points = create_circle_point_list(200, 50.,[50. , 400.]);
-			let points = PointRenderer::new(points, &context, &shader_manager);
+			let points = PointRenderer::new(points, &uniform_bind_group_layout, &context, &shader_manager);
 
 			//  - Triangle
 			let triangle = vec![
@@ -947,7 +764,7 @@ mod scene_manager {
 					],
 				}
 			];
-			let triangle = TriangleListRenderer::new(triangle, &context, &shader_manager);
+			let triangle = TriangleListRenderer::new(triangle, &uniform_bind_group_layout, &context, &shader_manager);
 
 			let mut rng = rand::rng();
 
@@ -961,23 +778,10 @@ mod scene_manager {
 					radius: 100.,
 				}
 			];
-			let circles = CircleRenderer::new(circles, &context, &shader_manager);
+			let circles = CircleRenderer::new(circles, &uniform_bind_group_layout, &context, &shader_manager);
 
 			// Texture Renderer
-			let texture_renderer = TextureRenderer::new(&context, &shader_manager);
-
-			let bind_group_layout = context.device().create_bind_group_layout(&_2d_uniform_bind_group_descriptor);
-
-			let uniform_bind_group = context.device().create_bind_group(&BindGroupDescriptor{
-				label: Some("Texture bind group"),
-				layout: &bind_group_layout,
-				entries: &[
-					BindGroupEntry{
-						binding: 0,
-						resource: uniform.buffers.as_entire_binding(),
-					},
-				],
-			});
+			let texture_renderer = TextureRenderer::new(&uniform_bind_group_layout, &context, &shader_manager);
 
 			Self {
 				scene: (points, triangle, circles, texture_renderer),
@@ -1021,6 +825,7 @@ mod scene_manager {
 				..Default::default()
 			});
 
+			render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 			self.scene.0.render(&mut render_pass, &context, &shader_manager);
 			self.scene.1.render(&mut render_pass, &context, &shader_manager);
 			self.scene.2.render(&mut render_pass, &context, &shader_manager);
