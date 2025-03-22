@@ -2,6 +2,13 @@ pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
+pub mod application;
+pub mod input;
+pub mod rendering;
+pub mod shader_manager;
+pub mod wgpu_context;
+pub mod timer;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,7 +1,6 @@
 mod point {
 	use crate::wgpu_context::*;
 	use wgpu::*;
-	use super::Uniform;
 
 	use crate::shader_manager::*;
 
@@ -112,7 +111,6 @@ mod point {
 
 mod triangle {
 	use crate::wgpu_context::*;
-	use super::Uniform;
 
 	use wgpu::*;
 
@@ -214,41 +212,22 @@ mod triangle {
 }
 
 mod rect {
-	use derive::UniformBufferData;
+	use derive::*;
 
 	use wgpu::*;
 
-	use super::Uniform;
 	use crate::shader_manager::*;
 	use crate::wgpu_context::*;
 	use crate::vertex_buffer_layout;
 
 	use bytemuck::{Pod, Zeroable};
-	#[derive(Clone, Copy, Pod, Zeroable, UniformBufferData)]
+	#[derive(Clone, Copy, Pod, Zeroable, UniformBufferData, VertexBufferData)]
 	#[repr(C)]
 	pub struct CenterRect {
 		pub color: [f32;4],
 		pub center: [f32;2],
 		pub size: [f32; 2],
 		pub rotation: f32,
-	}
-
-	impl BufferData for Vec<CenterRect> {
-		type Buffers = (WGPUBuffer, WGPUBuffer, WGPUBuffer, WGPUBuffer);
-		fn create_buffers(&self, context: &WGPUContext) -> Self::Buffers {
-			(
-				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;4]>() * self.len()) as u64, context),
-				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
-				WGPUBuffer::new_vertex((std::mem::size_of::<[f32;2]>() * self.len()) as u64, context),
-				WGPUBuffer::new_vertex((std::mem::size_of::<f32>() * self.len()) as u64, context),
-			)
-		}
-		fn fill_buffers(&self, buffers: &mut Self::Buffers, context: &WGPUContext) {
-			buffers.0.write_iter(self.iter().map(|x| &x.color), context);
-			buffers.1.write_iter(self.iter().map(|x| &x.center), context);
-			buffers.2.write_iter(self.iter().map(|x| &x.size), context);
-			buffers.3.write_iter(self.iter().map(|x| &x.rotation), context);
-		}
 	}
 
 	pub struct RectangleRenderer {
@@ -341,7 +320,6 @@ mod circle {
 	use derive::VertexBufferData;
 	use wgpu::*;
 	use crate::wgpu_context::{BufferAndData, WGPUContext};
-	use super::Uniform;
 	use crate::shader_manager::*;
 	use crate::vertex_buffer_layout;
 
@@ -435,6 +413,110 @@ mod circle {
 
 		pub fn update_circles(&mut self, context: &WGPUContext) {
 			self.circles.update_buffer(context);
+		}
+	}
+}
+
+mod ring {
+	use derive::VertexBufferData;
+	use wgpu::*;
+	use crate::wgpu_context::{BufferAndData, WGPUContext};
+	use crate::shader_manager::*;
+	use crate::vertex_buffer_layout;
+
+	use bytemuck::{Pod, Zeroable};
+
+	#[derive(Pod, Zeroable, Clone, Copy, VertexBufferData)]
+	#[repr(C)]
+	pub struct Ring {
+		pub color: [f32;4],
+		pub position: [f32;2],
+		pub outer_radius: f32,
+		pub inner_radius: f32,
+	}
+
+	pub struct RingRenderer {
+		rings: BufferAndData<Vec<Ring>>,
+	}
+
+	impl RingRenderer {
+		pub fn new(data: Vec<Ring>, uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+			let rings = BufferAndData::new(data, context);
+
+			let pipeline_layout = context.device().create_pipeline_layout(&PipelineLayoutDescriptor{
+				label: None,
+				bind_group_layouts: &[
+					&uniform_bind_group_layout,
+				],
+				push_constant_ranges: &[],
+			});
+			
+			let render_pipeline_template = RenderPipelineDescriptorTemplate{
+				label: Some("Ring Pipeline"),
+				layout: Some(pipeline_layout),
+				vertex: VertexStateTemplate{
+					module_path: "rings.wgsl",
+					entry_point: None,
+					buffers: &vertex_buffer_layout!(
+						([f32;4], Instance, &vertex_attr_array![0 => Float32x4]),
+						([f32;2], Instance, &vertex_attr_array![1 => Float32x2]),
+						(f32, Instance, &vertex_attr_array![2 => Float32]),
+						(f32, Instance, &vertex_attr_array![3 => Float32]),
+					)
+				},
+				primitive: PrimitiveState {
+					topology: PrimitiveTopology::TriangleStrip,
+					..Default::default()
+				},
+				depth_stencil: None,
+				multisample: Default::default(),
+				fragment: Some(FragmentStateTemplate{
+					module_path: "rings.wgsl",
+					entry_point: None,
+					targets: Box::new([
+						Some(ColorTargetState{
+							format: context.config().format,
+							blend: Some(BlendState{
+								color: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+								alpha: BlendComponent{
+									src_factor: BlendFactor::One,
+									dst_factor: BlendFactor::OneMinusSrcAlpha,
+									operation: BlendOperation::Add,
+								},
+							}),
+							write_mask: ColorWrites::ALL,
+						})
+					]),
+				}),
+				multiview: None,
+				cache: None,
+			};
+			shader_manager.register_render_pipeline("Ring", render_pipeline_template);
+
+			Self {
+				rings,
+			}
+		}
+
+		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
+			render_pass.set_pipeline(shader_manager.get_render_pipeline("Ring", context));
+			render_pass.set_vertex_buffer(0, self.rings.buffers.0.slice(..));
+			render_pass.set_vertex_buffer(1, self.rings.buffers.1.slice(..));
+			render_pass.set_vertex_buffer(2, self.rings.buffers.2.slice(..));
+			render_pass.set_vertex_buffer(3, self.rings.buffers.3.slice(..));
+			render_pass.draw(0..4 as u32, 0..self.rings.data.len() as u32);		
+		}
+
+		pub fn rings_mut(&mut self) -> &mut Vec<Ring> {
+			&mut self.rings.data
+		}
+
+		pub fn update_rings(&mut self, context: &WGPUContext) {
+			self.rings.update_buffer(context);
 		}
 	}
 }
@@ -736,6 +818,7 @@ pub use point::*;
 pub use triangle::*;
 pub use rect::*;
 pub use circle::*;
+pub use ring::*;
 pub use texture::*;
 #[macro_export]
 macro_rules! vertex_buffer_layout {
@@ -760,7 +843,7 @@ mod scene_manager {
 	use wgpu::*;
 
 	pub struct SceneManager {
-		scene: (PointRenderer, TriangleListRenderer, CircleRenderer, TextureRenderer),
+		scene: (RingRenderer, RectangleRenderer),
 		uniform: BufferAndData<Uniform>,
 		uniform_bind_group: BindGroup,
 	}
@@ -801,50 +884,33 @@ mod scene_manager {
 			});
 
 			// Create scene
-			//  - Points
-			let points = create_circle_point_list(200, 50.,[50. , 400.]);
-			let points = PointRenderer::new(points, &uniform_bind_group_layout, &context, &shader_manager);
-
-			//  - Triangle
-			let triangle = vec![
-				Triangle {
-					points: [
-						Point {
-							position: [400., 200.],
-							color: [1., 0., 0., 1.],
-						},
-						Point {
-							position: [300., 400.],
-							color: [0., 1., 0., 1.],
-						},
-						Point {
-							position: [500., 400.],
-							color: [0., 0., 1., 1.],
-						},
-					],
+			//  - Ring
+			let center = [context.config().width as f32 / 2., context.config().height as f32 / 2.];
+			const RADIUS: f32 = 200.;
+			let rings = vec![
+				Ring {
+					color: [1., 1., 1., 1.],
+					position: center,
+					outer_radius: RADIUS,
+					inner_radius: RADIUS * 0.9, 
 				}
 			];
-			let triangle = TriangleListRenderer::new(triangle, &uniform_bind_group_layout, &context, &shader_manager);
+			let rings = RingRenderer::new(rings, &uniform_bind_group_layout, &context, &shader_manager);
 
-			let mut rng = rand::rng();
-
-			//  - Circles
-			let circles = vec![
-				Circle {
-					color: [rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), 1.],
-					position: [
-						0., 0.,
-					],
-					radius: 100.,
+			// - Aim Bar
+			const START_ANGLE: f32 = std::f32::consts::PI / 2.;
+			let rects = vec![
+				CenterRect{
+					color : [1., 1., 1., 1.],
+					center : [center[0] + START_ANGLE.cos() * RADIUS / 2. * 0.98, center[1] - START_ANGLE.sin() * RADIUS / 2. * 0.98],
+					size : [RADIUS * 0.95, 10.],
+					rotation : START_ANGLE,
 				}
 			];
-			let circles = CircleRenderer::new(circles, &uniform_bind_group_layout, &context, &shader_manager);
-
-			// Texture Renderer
-			let texture_renderer = TextureRenderer::new(&uniform_bind_group_layout, &context, &shader_manager);
+			let rects = RectangleRenderer::new(rects, &uniform_bind_group_layout, &context, &shader_manager);
 
 			Self {
-				scene: (points, triangle, circles, texture_renderer),
+				scene: (rings, rects),
 				uniform,
 				uniform_bind_group,
 			}
@@ -886,10 +952,8 @@ mod scene_manager {
 			});
 
 			render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-			self.scene.3.render(&mut render_pass, &context, &shader_manager);
-			self.scene.0.render(&mut render_pass, &context, &shader_manager);
 			self.scene.1.render(&mut render_pass, &context, &shader_manager);
-			self.scene.2.render(&mut render_pass, &context, &shader_manager);
+			self.scene.0.render(&mut render_pass, &context, &shader_manager);
 
 			std::mem::drop(render_pass);
 			context.queue().submit([encoder.finish()]);
@@ -901,7 +965,7 @@ mod scene_manager {
 			self.uniform.update_buffer(context);
 		}
 
-		pub fn get_scene_mut(&mut self) -> &mut (PointRenderer, TriangleListRenderer, CircleRenderer, TextureRenderer) {
+		pub fn get_scene_mut(&mut self) -> &mut (RingRenderer, RectangleRenderer) {
 			&mut self.scene
 		}
 	}

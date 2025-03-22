@@ -68,35 +68,21 @@ impl AppInner {
 	pub fn update_scene(&mut self) {
 		let delta = self.timer.elapsed_reset();
 		self.timer.reset();
-
-		let mut move_dir = [0., 0.];
-
-		if self.input.key_map.is_pressed(key_char!("w")) {move_dir[1] -= delta * 500.;}
-		if self.input.key_map.is_pressed(key_char!("s")) {move_dir[1] += delta * 500.;}
-		if self.input.key_map.is_pressed(key_char!("a")) {move_dir[0] -= delta * 500.;}
-		if self.input.key_map.is_pressed(key_char!("d")) {move_dir[0] += delta * 500.;}
-
 		let scene = self.scene_manager.get_scene_mut();
+		
+		let center = [self.render_context.config().width as f32 / 2., self.render_context.config().height as f32 / 2.];
+		let mut angle = scene.1.rects_mut()[0].rotation;
+		let radius = scene.0.rings_mut()[0].outer_radius;
 
-		if move_dir != [0., 0.] {
-			scene.0.points_mut().iter_mut().for_each(|Point {position, ..}| {
-				*position = [position[0] + move_dir[0], position[1] + move_dir[1]];
-			});
-			scene.0.update_points_buffer(&self.render_context);
-		};
+		if self.input.key_map.is_pressed(key_char!("a")) {angle += delta * 1.;}
+		if self.input.key_map.is_pressed(key_char!("d")) {angle -= delta * 1.;}
 
-		scene.2.circles_mut()
-			.iter_mut()
-			.for_each(|Circle{position,..}| {
-				let scroll = self.input.mouse_map.scroll_level();
-				let mouse_position = self.input.mouse_map.mouse_position();
-				*position = [(mouse_position[0] + scroll[0]) as f32, (mouse_position[1] + scroll[1]) as f32];
-			});
-		scene.2.update_circles(&self.render_context);
-		scene.3.rect_mut().rotation = self.input.mouse_map.scroll_level()[1] as f32 * 0.01;
-		scene.3.rect_mut().center[0] += move_dir[0] / 500.;
-		scene.3.rect_mut().center[1] += move_dir[1] / 500.;
-		scene.3.update_rect(&self.render_context);
+		scene.0.rings_mut()[0].position = center;
+		scene.1.rects_mut()[0].center = [center[0] + angle.cos() * radius / 2. * 0.98, center[1] - angle.sin() * radius / 2. * 0.98];
+		scene.1.rects_mut()[0].rotation = angle;
+
+		scene.0.update_rings(&self.render_context);
+		scene.1.update_rects(&self.render_context);
 	}
 }
 
@@ -153,7 +139,8 @@ impl winit::application::ApplicationHandler for App {
 				inner.input.mouse_map.handle_button(button, state);
 			}
 			WindowEvent::Resized(new_size) => {
-				inner.render_context.resize(winit::dpi::PhysicalSize::new(8, 8));
+				// inner.render_context.resize(winit::dpi::PhysicalSize::new(8, 8));
+				inner.render_context.resize(new_size);
 				inner.scene_manager.update_uniform(&inner.render_context);
 				inner.window.request_redraw();
 			},
