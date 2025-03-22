@@ -124,33 +124,12 @@ mod point {
 			self.uniform.update_buffer(context);
 		}
 
-		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
-			let mut encoder = context.device().create_command_encoder(&CommandEncoderDescriptor{
-				label: Some("Points command encoder"),
-			});
-			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
-				label: Some("Points render pass"),
-				color_attachments: &[
-					Some(RenderPassColorAttachment{
-						view: target,
-						resolve_target: None,
-						ops: Operations {
-							load: LoadOp::Load,
-							store: StoreOp::Store,
-						}
-					}),
-				],
-				..Default::default()
-			});
-
+		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("Point Renderer Pipeline", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.points.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.points.buffers.1.slice(..));
 			render_pass.draw(0..(self.points.data.len()) as u32, 0..1);
-			std::mem::drop(render_pass);
-
-			context.queue().submit([encoder.finish()]);
 		}
 
 		pub fn points_mut(&mut self) -> &mut Vec<Point> {
@@ -309,39 +288,17 @@ mod triangle {
 			self.uniform.update_buffer(context);
 		}
 
-		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
-			let mut encoder = context.get_encoder();
-			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
-				label: None,
-				color_attachments: &[
-					Some(RenderPassColorAttachment{
-						view: target,
-						resolve_target: None,
-						ops: Operations {
-							load: LoadOp::Load,
-							store: StoreOp::Store,
-						}
-					})
-				],
-				..Default::default()
-			});
-
-			let pipeline = shader_manager.get_render_pipeline("triangles", context);
-
-			render_pass.set_pipeline(pipeline);
+		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
+			render_pass.set_pipeline(shader_manager.get_render_pipeline("triangles", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.triangles.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.triangles.buffers.1.slice(..));
 			render_pass.draw(0..(self.triangles.data.len() * 3) as u32, 0..1);
-
-			std::mem::drop(render_pass);
-			context.queue().submit([encoder.finish()]);
 		}
 	}
 }
 
 mod rect {
-
 	use derive::UniformBufferData;
 
 	use wgpu::*;
@@ -488,35 +445,14 @@ mod rect {
 			self.uniform.update_buffer(context);
 		}
 
-		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
-			let mut encoder = context.get_encoder();
-			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
-				label: None,
-				color_attachments: &[
-					Some(RenderPassColorAttachment{
-						view: target,
-						resolve_target: None,
-						ops: Operations {
-							load: LoadOp::Load,
-							store: StoreOp::Store,
-						}
-					})
-				],
-				..Default::default()
-			});
-
-			let pipeline = shader_manager.get_render_pipeline("rects", context);
-
-			render_pass.set_pipeline(pipeline);
+		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
+			render_pass.set_pipeline(shader_manager.get_render_pipeline("rects", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.rectangles.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.rectangles.buffers.1.slice(..));
 			render_pass.set_vertex_buffer(2, self.rectangles.buffers.2.slice(..));
 			render_pass.set_vertex_buffer(3, self.rectangles.buffers.3.slice(..));
 			render_pass.draw(0..4 as u32, 0..self.rectangles.data.len() as u32);
-
-			std::mem::drop(render_pass);
-			context.queue().submit([encoder.finish()]);
 		}
 
 		pub fn rects_mut(&mut self) -> &mut Vec<CenterRect> {
@@ -655,34 +591,13 @@ mod circle {
 			self.uniform.update_buffer(context);
 		}
 
-		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
-			let mut encoder = context.get_encoder();
-			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
-				label: None,
-				color_attachments: &[
-					Some(RenderPassColorAttachment{
-						view: target,
-						resolve_target: None,
-						ops: Operations {
-							load: LoadOp::Load,
-							store: StoreOp::Store,
-						}
-					})
-				],
-				..Default::default()
-			});
-
-			let pipeline = shader_manager.get_render_pipeline("circle", context);
-
-			render_pass.set_pipeline(pipeline);
+		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
+			render_pass.set_pipeline(shader_manager.get_render_pipeline("circle", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.set_vertex_buffer(0, self.circles.buffers.0.slice(..));
 			render_pass.set_vertex_buffer(1, self.circles.buffers.1.slice(..));
 			render_pass.set_vertex_buffer(2, self.circles.buffers.2.slice(..));
-			render_pass.draw(0..4 as u32, 0..self.circles.data.len() as u32);
-
-			std::mem::drop(render_pass);
-			context.queue().submit([encoder.finish()]);
+			render_pass.draw(0..4 as u32, 0..self.circles.data.len() as u32);		
 		}
 
 		pub fn circles_mut(&mut self) -> &mut Vec<Circle> {
@@ -933,31 +848,10 @@ mod texture {
 			&mut self.rect.data
 		}
 
-		pub fn render(&mut self, target: &TextureView, context: &WGPUContext, shader_manager: &ShaderManager) {
-			let mut encoder = context.get_encoder();
-			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
-				label: None,
-				color_attachments: &[
-					Some(RenderPassColorAttachment{
-						view: target,
-						resolve_target: None,
-						ops: Operations {
-							load: LoadOp::Load,
-							store: StoreOp::Store,
-						}
-					})
-				],
-				..Default::default()
-			});
-
-			let pipeline = shader_manager.get_render_pipeline("texture", context);
-
-			render_pass.set_pipeline(pipeline);
+		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
+			render_pass.set_pipeline(shader_manager.get_render_pipeline("texture", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
 			render_pass.draw(0..4, 0..1);
-
-			std::mem::drop(render_pass);
-			context.queue().submit([encoder.finish()]);
 		}
 	}
 }
@@ -1081,7 +975,6 @@ mod scene_manager {
 				],
 			});
 
-
 			Self {
 				scene: (points, triangle, circles, texture_renderer),
 				uniform,
@@ -1107,12 +1000,30 @@ mod scene_manager {
 				base_array_layer: 0,
 				array_layer_count: None,
 			});
-			
-			self.scene.0.render(&texture_view, &context, &shader_manager);
-			self.scene.1.render(&texture_view, &context, &shader_manager);
-			self.scene.2.render(&texture_view, &context, &shader_manager);
-			self.scene.3.render(&texture_view, &context, &shader_manager);
 
+			let mut encoder = context.get_encoder();
+			let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
+				label: None,
+				color_attachments: &[
+					Some(RenderPassColorAttachment{
+						view: &texture_view,
+						resolve_target: None,
+						ops: Operations {
+							load: LoadOp::Load,
+							store: StoreOp::Store,
+						}
+					})
+				],
+				..Default::default()
+			});
+
+			self.scene.0.render(&mut render_pass, &context, &shader_manager);
+			self.scene.1.render(&mut render_pass, &context, &shader_manager);
+			self.scene.2.render(&mut render_pass, &context, &shader_manager);
+			self.scene.3.render(&mut render_pass, &context, &shader_manager);
+
+			std::mem::drop(render_pass);
+			context.queue().submit([encoder.finish()]);
 			surface_texture.present();
 		}
 

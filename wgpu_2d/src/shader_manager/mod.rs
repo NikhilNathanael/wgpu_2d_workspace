@@ -169,7 +169,7 @@ impl ShaderManager {
 		})
 	}
 
-	pub fn get_module<'a>(&'a self, path: &str, context: &WGPUContext) -> &'a ShaderModule {
+	fn get_module<'a>(&'a self, path: &str, context: &WGPUContext) -> &'a ShaderModule {
 		// SAFETY: The only thing that can invalidate the lifetime of the returned reference 
 		// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
 		//

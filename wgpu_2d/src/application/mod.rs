@@ -157,6 +157,9 @@ impl winit::application::ApplicationHandler for App {
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
+				let time = inner.timer.elapsed_reset();
+				inner.timer.reset();
+				log::info!("Frame time: {:?}", time);
 				inner.update_scene();
 				inner.scene_manager.render_all(&inner.render_context, &inner.shader_manager);
 				inner.window.request_redraw();
