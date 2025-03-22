@@ -1,5 +1,6 @@
 
 // Common data such as uniforms and bindings for them
+// TODO: Move bindings to separate files
 
 struct Uniform {
 	screen_size: vec2<f32>,

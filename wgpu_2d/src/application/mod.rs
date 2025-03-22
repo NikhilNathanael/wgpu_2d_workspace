@@ -96,6 +96,8 @@ impl AppInner {
 				*position = [(mouse_position[0] + scroll[0]) as f32, (mouse_position[1] + scroll[1]) as f32];
 			});
 		scene.2.update_circles(&self.render_context);
+		scene.3.rect_mut().rotation = self.input.mouse_map.scroll_level()[1] as f32;
+		scene.3.update_rect(&self.render_context);
 	}
 }
 
@@ -157,9 +159,6 @@ impl winit::application::ApplicationHandler for App {
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
-				let time = inner.timer.elapsed_reset();
-				inner.timer.reset();
-				log::info!("Frame time: {:?}", time);
 				inner.update_scene();
 				inner.scene_manager.render_all(&inner.render_context, &inner.shader_manager);
 				inner.window.request_redraw();

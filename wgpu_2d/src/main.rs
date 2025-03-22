@@ -22,14 +22,21 @@ fn main () {
 	_ = event_loop.run_app(&mut app);
 }
 
-// TODO (Finished) : Timer struct
+// (Finished) : Timer struct
 // 		- total time since start
 // 		- time since last reset (usually last frame)
 // 		- integer based (No floating point precision issues)
-// TODO (Finished) : Shader Compilation Manager
+// (Finished) : Shader Compilation Manager
 // 		- Automatically reads and compiles shaders in shader directory
 // 		- Hot-reloading
 // 		- caches pipelines as well as modules
+// (Finished) : Add Include files to shader manager
+// 		- read the shader input and check for any `#include "<file_name>"` fragments
+// 		- read the file indicated by that name and include it in that location
+// (Finished) : Add Transparency blending
+// (Finished) : Add derive macros for Buffer data
+// 		- One macro for Vertex data
+// 		- One macro for Uniform data
 // TODO : Unify the renderers for each type of primitive (point, triangle, 
 //        center_rect and circle for now) into a single struct with a generic parameter
 //      - Define a trait for each type of primitive
@@ -38,10 +45,3 @@ fn main () {
 //      		- registering pipelines
 //      		- creation of bind group layout
 //      		- creation of bind groups
-// TODO (Finished) : Add Include files to shader manager
-// 		- read the shader input and check for any `#include "<file_name>"` fragments
-// 		- read the file indicated by that name and include it in that location
-// TODO (Finished) : Add Transparency blending
-// TODO : Add derive macros for Buffer data
-// 		- One macro for Vertex data
-// 		- One macro for Uniform data

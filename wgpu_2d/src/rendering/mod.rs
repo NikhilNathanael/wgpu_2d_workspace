@@ -848,6 +848,10 @@ mod texture {
 			&mut self.rect.data
 		}
 
+		pub fn update_rect(&mut self, context: &WGPUContext) {
+			self.rect.update_buffer(context);
+		}
+
 		pub fn render(&mut self, render_pass: &mut RenderPass, context: &WGPUContext, shader_manager: &ShaderManager) {
 			render_pass.set_pipeline(shader_manager.get_render_pipeline("texture", context));
 			render_pass.set_bind_group(0, &self.bind_group, &[]);
@@ -1009,7 +1013,7 @@ mod scene_manager {
 						view: &texture_view,
 						resolve_target: None,
 						ops: Operations {
-							load: LoadOp::Load,
+							load: LoadOp::Clear(Color{r: 0.05, g: 0.05, b: 0.05, a: 1.0}),
 							store: StoreOp::Store,
 						}
 					})
