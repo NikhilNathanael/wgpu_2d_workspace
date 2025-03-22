@@ -703,7 +703,6 @@ mod texture {
 	use wgpu::*;
 	use bytemuck::{Pod, Zeroable};
 
-
 	pub struct TextureRenderer {
 		rect: BufferAndData<CenterRect>,
 		uniform: BufferAndData<Uniform>,
@@ -738,8 +737,6 @@ mod texture {
 				[x, y, x, x, x,],
 				[x, x, x, x, x,],
 			];
-
-			println!("{:?}", bytemuck::cast_slice::<_, u8>(texture_data));
 
 			// Create Texture
 			let texture = context.device().create_texture(&TextureDescriptor{
@@ -991,3 +988,141 @@ macro_rules! vertex_buffer_layout {
 	}
 }
 
+pub use scene_manager::*;
+mod scene_manager {
+	use super::*;
+	use crate::wgpu_context::{WGPUContext, BufferAndData};
+	use crate::shader_manager::ShaderManager;
+	use rand::{Rng, thread_rng};
+
+	use wgpu::*;
+
+	pub struct SceneManager {
+		scene: (PointRenderer, TriangleListRenderer, CircleRenderer, TextureRenderer),
+		uniform: BufferAndData<Uniform>,
+		uniform_bind_group: BindGroup,
+	}
+
+	impl SceneManager {
+		pub fn new (context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
+			let _2d_uniform_bind_group_descriptor = BindGroupLayoutDescriptor{
+				label: Some("Texture bind group layout"),
+				entries: &[
+					BindGroupLayoutEntry {
+						binding: 0,
+						visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+						ty: BindingType::Buffer{
+							ty: BufferBindingType::Uniform,
+							has_dynamic_offset: false,
+							min_binding_size: None,
+						},
+						count: None,
+					},
+				],
+			};
+
+			let uniform = BufferAndData::new(Uniform {
+				screen_size: [context.config().width as f32, context.config().height as f32],
+			}, context);
+
+			// Create scene
+			//  - Points
+			let points = create_circle_point_list(200, 50.,[50. , 400.]);
+			let points = PointRenderer::new(points, &context, &shader_manager);
+
+			//  - Triangle
+			let triangle = vec![
+				Triangle {
+					points: [
+						Point {
+							position: [400., 200.],
+							color: [1., 0., 0., 1.],
+						},
+						Point {
+							position: [300., 400.],
+							color: [0., 1., 0., 1.],
+						},
+						Point {
+							position: [500., 400.],
+							color: [0., 0., 1., 1.],
+						},
+					],
+				}
+			];
+			let triangle = TriangleListRenderer::new(triangle, &context, &shader_manager);
+
+			let mut rng = rand::rng();
+
+			//  - Circles
+			let circles = vec![
+				Circle {
+					color: [rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), rng.random_range(0.0..1.0), 1.],
+					position: [
+						0., 0.,
+					],
+					radius: 100.,
+				}
+			];
+			let circles = CircleRenderer::new(circles, &context, &shader_manager);
+
+			// Texture Renderer
+			let texture_renderer = TextureRenderer::new(&context, &shader_manager);
+
+			let bind_group_layout = context.device().create_bind_group_layout(&_2d_uniform_bind_group_descriptor);
+
+			let uniform_bind_group = context.device().create_bind_group(&BindGroupDescriptor{
+				label: Some("Texture bind group"),
+				layout: &bind_group_layout,
+				entries: &[
+					BindGroupEntry{
+						binding: 0,
+						resource: uniform.buffers.as_entire_binding(),
+					},
+				],
+			});
+
+
+			Self {
+				scene: (points, triangle, circles, texture_renderer),
+				uniform,
+				uniform_bind_group,
+			}
+		}
+
+		pub fn render_all(&mut self, context: &WGPUContext, shader_manager: &ShaderManager) {
+			// log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
+			// self.timer.reset();
+
+			let surface_texture = context.surface().get_current_texture()
+				.expect("Could not get current texture");
+
+			let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor{
+				label: Some("Render Texture"),
+				format: Some(surface_texture.texture.format()),
+				dimension: Some(TextureViewDimension::D2),
+				usage: Some(TextureUsages::RENDER_ATTACHMENT),
+				aspect: TextureAspect::All,
+				base_mip_level: 0,
+				mip_level_count: None,
+				base_array_layer: 0,
+				array_layer_count: None,
+			});
+			
+			self.scene.0.render(&texture_view, &context, &shader_manager);
+			self.scene.1.render(&texture_view, &context, &shader_manager);
+			self.scene.2.render(&texture_view, &context, &shader_manager);
+			self.scene.3.render(&texture_view, &context, &shader_manager);
+
+			surface_texture.present();
+		}
+
+		pub fn update_uniform(&mut self, context: &WGPUContext) {
+			self.uniform.data.screen_size = [context.config().width as f32, context.config().height as f32];
+			self.uniform.update_buffer(context);
+		}
+
+		pub fn get_scene_mut(&mut self) -> &mut (PointRenderer, TriangleListRenderer, CircleRenderer, TextureRenderer) {
+			&mut self.scene
+		}
+	}
+}
