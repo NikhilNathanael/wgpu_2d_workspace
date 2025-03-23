@@ -1,12 +1,12 @@
-#![allow(dead_code)]
 //#![windows_subsystem = "windows"]
-mod rendering;
-mod shader_manager;
-mod wgpu_context;
-mod input;
-mod timer;
+pub mod rendering;
+pub mod shader_manager;
+pub mod wgpu_context;
+pub mod input;
+pub mod timer;
+pub mod math;
 
-mod application;
+pub mod application;
 use application::*;
 
 fn main () {

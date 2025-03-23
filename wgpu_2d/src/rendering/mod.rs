@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 mod point {
 	use crate::wgpu_context::*;
 	use wgpu::*;
@@ -590,8 +589,11 @@ mod texture {
 
 	pub struct TextureRenderer {
 		rect: BufferAndData<CenterRect>,
+		#[allow(dead_code)]
 		texture: Texture,
+		#[allow(dead_code)]
 		view: TextureView,
+		#[allow(dead_code)]
 		sampler: Sampler,
 		bind_group: BindGroup,
 	}

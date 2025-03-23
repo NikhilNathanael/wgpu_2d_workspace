@@ -12,3 +12,4 @@ simple_logger = "5.0.0"
 wgpu = "24.0.0"
 winit = "0.30.9"
 derive = {path = "../derive", version = "0.1.0"}
+gamepad_input = {git = "https://github.com/NikhilNathanael/gamepad_input", version = "0.1.0"}

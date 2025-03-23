@@ -33,7 +33,6 @@ pub mod key_map {
 			};
 		}
 
-		#[allow(dead_code)]
 		pub fn register_callback<F: FnMut(&Key, ElementState) + 'static + Send> (&mut self, label: &str, callback: F) {
 			match self.callbacks.get(label) {
 				None => self.callbacks.insert(label.into(), Box::new(callback)),
@@ -41,7 +40,6 @@ pub mod key_map {
 			};
 		}
 
-		#[allow(dead_code)]
 		pub fn remove_callback(&mut self, label: &str) {
 			_ = self.callbacks.remove_entry(label)
 				.expect(&format!("Callback with label '{}' was not registered or was already unregistered", label));
@@ -97,23 +95,19 @@ pub mod mouse_map {
 		}
 
 		// Cursor 
-		#[allow(dead_code)]
 		pub fn mouse_position (&self) -> [f64;2] {
 			self.position
 		}
 
-		#[allow(dead_code)]
 		pub fn handle_cursor_movement(&mut self, position: PhysicalPosition<f64>) {
 			self.position = [position.x, position.y];
 		}
 
 		// Scroll
-		#[allow(dead_code)]
 		pub fn scroll_level(&self) -> [f64;2] {
 			self.scroll_level
 		}
 
-		#[allow(dead_code)]
 		pub fn handle_mouse_scroll(&mut self, delta: MouseScrollDelta) {
 			const PIXELS_PER_LINE: f64 = 10.;
 			let [x_s, y_s] = self.scroll_level;
@@ -123,12 +117,10 @@ pub mod mouse_map {
 			}
 		}
 
-		#[allow(dead_code)]
 		pub fn handle_raw_scroll(&mut self, delta: MouseScrollDelta) {
 			self.raw_scroll_callbacks.iter_mut().for_each(|(_, callback)| callback(&delta));
 		}
 
-		#[allow(dead_code)]
 		pub fn register_raw_scroll_callback<F: FnMut(&MouseScrollDelta) + Send + 'static>
 			(&mut self, label: &str, callback: F)
 		{
@@ -138,20 +130,17 @@ pub mod mouse_map {
 			};
 		}
 
-		#[allow(dead_code)]
 		pub fn unregister_raw_scroll_callback(&mut self, label: &str) {
 			_ = self.raw_scroll_callbacks.remove_entry(label)
 				.expect(&format!("Callback with label '{}' was not registered or was already unregistered", label));
 		}
 
 		// Mouse Buttons
-		#[allow(dead_code)]
 		pub fn handle_button(&mut self, button: MouseButton, state: ElementState) {
 			self.button_callbacks.iter_mut().for_each(|(_, callback)| callback(&button, state));
 			self.pressed_buttons.insert(button);
 		}
 
-		#[allow(dead_code)]
 		pub fn register_button_callback<F: FnMut(&MouseButton, ElementState) + Send + 'static>
 			(&mut self, label: &str, callback: F)
 		{
@@ -161,19 +150,16 @@ pub mod mouse_map {
 			};
 		}
 
-		#[allow(dead_code)]
 		pub fn unregister_button_callback(&mut self, label: &str) {
 			_ = self.button_callbacks.remove_entry(label)
 				.expect(&format!("Callback with label '{}' was not registered or was already unregistered", label));
 		}
 
 		// Raw Movement
-		#[allow(dead_code)]
 		pub fn handle_raw_mouse_movement(&mut self, delta: (f64, f64)) {
 			self.raw_movement_callbacks.iter_mut().for_each(|(_, callback)| callback(&delta));
 		}
 
-		#[allow(dead_code)]
 		pub fn register_raw_movement_callback<F: FnMut(&(f64, f64)) + Send + 'static>
 			(&mut self, label: &str, callback: F)
 		{
@@ -183,7 +169,6 @@ pub mod mouse_map {
 			};
 		}
 
-		#[allow(dead_code)]
 		pub fn unregister_raw_movement_callback(&mut self, label: &str) {
 			_ = self.raw_movement_callbacks.remove_entry(label)
 				.expect(&format!("Callback with label '{}' was not registered or was already unregistered", label));
@@ -191,4 +176,7 @@ pub mod mouse_map {
 	}
 }
 
+pub mod game_pad_map {
+
+}
 pub use key_map::*;

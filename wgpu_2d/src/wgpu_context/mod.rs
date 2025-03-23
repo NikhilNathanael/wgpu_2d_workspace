@@ -154,7 +154,6 @@ mod buffers {
 			}
 		}
 
-		#[allow(dead_code)]
 		pub fn new_storage(size: u64, context: &WGPUContext) -> Self {
 			Self {
 				buffer: Self::new(
@@ -175,7 +174,6 @@ mod buffers {
 			}
 		}
 
-		#[allow(dead_code)]
 		pub fn new_index(size: u64, context: &WGPUContext) -> Self {
 			Self {
 				buffer: Self::new(

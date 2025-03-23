@@ -439,6 +439,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
+name = "gamepad_input"
+version = "0.1.0"
+source = "git+https://github.com/NikhilNathanael/gamepad_input#1f5959b0ca547aeaeb8a81a9478995d487e7658b"
+dependencies = [
+ "windows_error_handling",
+]
+
+[[package]]
 name = "gethostname"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2085,6 +2093,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "derive",
+ "gamepad_input",
  "log",
  "pollster",
  "rand",
@@ -2283,6 +2292,11 @@ name = "windows_aarch64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2a7bb152e2252b53fa7803150007879548bc709c039df7627cabbd05d469"
+
+[[package]]
+name = "windows_error_handling"
+version = "0.1.0"
+source = "git+https://github.com/NikhilNathanael/windows_error_handling#48f7673b4ffd0333d7716b4455f4d25a88515d15"
 
 [[package]]
 name = "windows_i686_gnu"
