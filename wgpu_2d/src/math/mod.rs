@@ -11,9 +11,13 @@ mod vector {
 				data: [T;$actual_len]
 			}
 
-			impl<T> $outer_name<T> {
-				pub fn new (data: [T;$actual_len]) -> Self {
-					Self {data}
+			impl<T: Zeroable> $outer_name<T> {
+				fn new (data: [T;$deref_len]) -> Self {
+					let mut output = <[T;$actual_len]>::zeroed();
+					unsafe{(&mut output as *mut [T;$actual_len] as *mut [T;$deref_len]).write(data)};
+					Self {
+						data: output,
+					}
 				}
 			}
 
@@ -34,9 +38,21 @@ mod vector {
 			}
 		}
 	}
+
+	// Used in dot product implementation
+	macro_rules! strip_plus {
+		(+ $rest: expr) => {$rest};
+	}
+	
 	// All add, sub, mul, and div implementations
 	macro_rules! impl_math {
-		($vector_ty: ty, $($indeces: literal),+) => {
+		($vector_ty: ty, $inner_ty: ty, $($indeces: literal),*) => {
+			impl $vector_ty {
+				fn dot (&self, other: Self) -> $inner_ty {
+					strip_plus!($(+ self.data[$indeces] * other.data[$indeces])+)
+				}
+			}
+
 			impl<'a> Add<&'a $vector_ty> for &'a $vector_ty {
 				type Output = $vector_ty;
 				fn add(self, other: &'a $vector_ty) -> Self::Output {
@@ -166,6 +182,7 @@ mod vector {
 			}
 		}
 	}
+
 	// tests for the above implemenations
 	macro_rules! impl_math_tests {
 		($inner_ty: ty, $outer_ty: tt, $size: literal, $($indeces: literal),+) => {
@@ -180,7 +197,7 @@ mod vector {
 					let sum_normal = [$(x[$indeces] + y[$indeces]),+];
 
 					let z = $outer_ty::<$inner_ty>::new(x) + $outer_ty::<$inner_ty>::new(y);
-					assert_eq!(sum_normal, z.data);
+					assert_eq!(&sum_normal, z.deref());
 				});
 			}
 
@@ -195,7 +212,7 @@ mod vector {
 					let diff_normal = [$(x[$indeces] - y[$indeces]),+];
 
 					let z = $outer_ty::<$inner_ty>::new(x) - $outer_ty::<$inner_ty>::new(y);
-					assert_eq!(diff_normal, z.data);
+					assert_eq!(&diff_normal, z.deref());
 				});
 			}
 
@@ -210,7 +227,7 @@ mod vector {
 					let mul_normal = [$(x[$indeces] * y[$indeces]),+];
 
 					let z = $outer_ty::<$inner_ty>::new(x) * $outer_ty::<$inner_ty>::new(y);
-					assert_eq!(mul_normal, z.data);
+					assert_eq!(&mul_normal, z.deref());
 				});
 			}
 
@@ -225,7 +242,7 @@ mod vector {
 					let div_normal = [$(x[$indeces] / y[$indeces]),+];
 
 					let z = $outer_ty::<$inner_ty>::new(x) / $outer_ty::<$inner_ty>::new(y);
-					assert_eq!(div_normal, z.data);
+					assert_eq!(&div_normal, z.deref());
 				});
 			}
 
@@ -235,6 +252,48 @@ mod vector {
 				let mut rng = rng();
 				println!("{:?}", $outer_ty::<$inner_ty>::new(rng.random()).deref());
 			}
+
+			#[cfg(test)]
+			#[test]
+			fn dot_test() {
+				let mut rng = rng();
+				(0..200).for_each(|_| {
+					let x: [$inner_ty;$size] = rng.random();
+					let y: [$inner_ty;$size] = rng.random();
+
+					let dot_normal = strip_plus!($(+ x[$indeces] * y[$indeces])+);
+
+					let z = $outer_ty::<$inner_ty>::new(x).dot($outer_ty::<$inner_ty>::new(y));
+					assert_eq!(dot_normal, z);
+				});
+			}
+		}
+	}
+
+	// Cross Product is only available in 3 dimensions
+	impl Vector3<f32> {
+		fn cross_product (&self, other: &Self) -> Self {
+			Self {
+				data: [
+					self.data[1] * other.data[2] - self.data[2] * other.data[1],
+					- self.data[0] * other.data[2] + self.data[2] * other.data[0],
+					self.data[0] * other.data[1] - self.data[1] * other.data[0],
+					0.
+				]
+			}
+		}
+	}
+
+	impl Vector3<i32> {
+		fn cross_product (&self, other: &Self) -> Self {
+			Self {
+				data: [
+					self.data[1] * other.data[2] - self.data[2] * other.data[1],
+					- self.data[0] * other.data[2] + self.data[2] * other.data[0],
+					self.data[0] * other.data[1] - self.data[1] * other.data[0],
+					0
+				]
+			}
 		}
 	}
 
@@ -242,18 +301,14 @@ mod vector {
 	impl_def!(Vector3, 4, 3);
 	impl_def!(Vector4, 4, 4);
 
-	mod f32{
-		use std::ops::{Add, Sub, Mul, Div};
-		use super::*;
-		impl_math!(Vector2<f32>, 0, 1);
-		impl_math!(Vector3<f32>, 0, 1, 2, 3);
-		impl_math!(Vector4<f32>, 0, 1, 2, 3);
-	}
-	mod u32{
-		use std::ops::{Add, Sub, Mul, Div};
-		use super::*;
-		impl_math!(Vector2<u32>, 0, 1);
-	}
+	use std::ops::{Add, Sub, Mul, Div};
+	use super::*;
+	impl_math!(Vector2<f32>, f32, 0, 1);
+	impl_math!(Vector2<i32>, i32, 0, 1);
+
+	impl_math!(Vector3<f32>, f32, 0, 1, 2, 3);
+
+	impl_math!(Vector4<f32>, f32, 0, 1, 2, 3);
 
 	use rand::{Rng, rng};
 	mod vector2_f32_tests{
@@ -264,7 +319,7 @@ mod vector {
 	mod vector3_f32_tests{
 		use rand::{Rng, rng};
 		use super::*;
-		impl_math_tests!(f32, Vector3, 4, 0, 1, 2, 3);
+		impl_math_tests!(f32, Vector3, 3, 0, 1, 2);
 	}
 	mod vector4_f32_tests{
 		use rand::{Rng, rng};
