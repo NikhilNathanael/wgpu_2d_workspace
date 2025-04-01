@@ -9,6 +9,7 @@ pub mod shader_manager;
 pub mod wgpu_context;
 pub mod timer;
 pub mod math;
+pub mod system;
 
 #[cfg(test)]
 mod tests {
@@ -22,3 +23,5 @@ mod tests {
 }
 
 // TODO: Finish Gamepad map and gamepad aim-assist
+// TODO: Remove winit as dependancy of lib and make users directly 
+//       use winit instead
