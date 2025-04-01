@@ -64,14 +64,15 @@ pub mod mouse_map {
     use std::collections::{HashMap, HashSet};
 
     use winit::{dpi::PhysicalPosition, event::{ElementState, MouseButton, MouseScrollDelta}};
+	use crate::math::Vector2;
 
 	pub struct MouseMap {
 		/// Position of Mouse from WindowEvent. This does not use the Raw mouse movement.
 		/// If Raw movement is required (for camera control, for example), register a 
 		/// raw movement callback which forwards the data to the required location
-		position: [f64;2],
+		position: Vector2<f32>,
 		/// Scroll level from WindowEvent. This does not use Raw Scroll event
-		scroll_level: [f64; 2],
+		scroll_level: Vector2<f32>,
 		/// A list of currently pressed mouse buttons
 		pressed_buttons : HashSet<MouseButton>,
 		/// Callbacks which are called when a raw movement device event is recieved
@@ -85,8 +86,8 @@ pub mod mouse_map {
 	impl MouseMap {
 		pub fn new() -> Self{
 			Self {
-				position: [0.;2],
-				scroll_level: [0.;2],
+				position: Vector2::new([0.0;2]),
+				scroll_level: Vector2::new([0.0;2]),
 				pressed_buttons: HashSet::new(),
 				raw_movement_callbacks: HashMap::new(),
 				raw_scroll_callbacks: HashMap::new(),
@@ -95,25 +96,24 @@ pub mod mouse_map {
 		}
 
 		// Cursor 
-		pub fn mouse_position (&self) -> [f64;2] {
+		pub fn mouse_position (&self) -> Vector2<f32> {
 			self.position
 		}
 
 		pub fn handle_cursor_movement(&mut self, position: PhysicalPosition<f64>) {
-			self.position = [position.x, position.y];
+			self.position = Vector2::new([position.x as f32, position.y as f32]);
 		}
 
 		// Scroll
-		pub fn scroll_level(&self) -> [f64;2] {
+		pub fn scroll_level(&self) -> Vector2<f32> {
 			self.scroll_level
 		}
 
 		pub fn handle_mouse_scroll(&mut self, delta: MouseScrollDelta) {
-			const PIXELS_PER_LINE: f64 = 10.;
-			let [x_s, y_s] = self.scroll_level;
+			const PIXELS_PER_LINE: f32= 10.;
 			match delta {
-				MouseScrollDelta::LineDelta(x_d, y_d) => self.scroll_level = [x_s + PIXELS_PER_LINE * x_d as f64, y_s + PIXELS_PER_LINE * y_d as f64],
-				MouseScrollDelta::PixelDelta(delta) => self.scroll_level = [x_s + delta.x, y_s + delta.y],
+				MouseScrollDelta::LineDelta(x_d, y_d) => self.scroll_level = self.scroll_level + Vector2::from(PIXELS_PER_LINE) * Vector2::new([x_d, y_d]),
+				MouseScrollDelta::PixelDelta(delta) => self.scroll_level = self.scroll_level + Vector2::new([delta.x as f32, delta.y as f32]),
 			}
 		}
 

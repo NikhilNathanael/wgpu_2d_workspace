@@ -559,6 +559,38 @@ mod vector {
 		}
 	}
 
+	// Magnitude is only supported for float vectors
+	macro_rules! mag_impl {
+		($outer_ty: ident, $inner_ty: ident;$($index: literal),+) => {
+			impl $outer_ty<$inner_ty> {
+				pub fn mag(&self) -> $inner_ty {
+					(
+						strip_plus!($(+ self.data[$index].powi(2))+)
+					).sqrt()
+				}
+			}
+		}
+	}
+
+	mag_impl!(Vector2, f32; 0, 1);
+	mag_impl!(Vector2, f64; 0, 1);
+	mag_impl!(Vector3, f32; 0, 1, 2);
+	mag_impl!(Vector3, f64; 0, 1, 2);
+	mag_impl!(Vector4, f32; 0, 1, 2, 3);
+	mag_impl!(Vector4, f64; 0, 1, 2, 3);
+
+	// Angle is only implemented for float vectors 
+	impl Vector2<f32> {
+		pub fn angle(&self) -> f32 {
+			self.data[1].atan2(self.data[0])
+		}
+	}
+	impl Vector2<f64> {
+		pub fn angle(&self) -> f64 {
+			self.data[1].atan2(self.data[0])
+		}
+	}
+
 	// Cross Product is only available in 3 dimensions
 	impl Vector3<f32> {
 		pub fn cross_product (&self, other: &Self) -> Self {
@@ -592,12 +624,15 @@ mod vector {
 
 	use std::ops::{Add, Sub, Mul, Div};
 	impl_math!(Vector2<f32>, f32, 0, 1);
+	impl_math!(Vector2<f64>, f64, 0, 1);
 	impl_math!(Vector2<i32>, i32, 0, 1);
 
 	impl_math!(Vector3<f32>, f32, 0, 1, 2, 3);
+	impl_math!(Vector3<f64>, f64, 0, 1, 2, 3);
 	impl_math!(Vector3<i32>, i32, 0, 1, 2; 3);
 
 	impl_math!(Vector4<f32>, f32, 0, 1, 2, 3);
+	impl_math!(Vector4<f64>, f64, 0, 1, 2, 3);
 	impl_math!(Vector4<i32>, i32, 0, 1, 2, 3);
 
 	mod vector2_f32_tests{

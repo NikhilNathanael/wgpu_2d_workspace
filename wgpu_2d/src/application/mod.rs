@@ -101,14 +101,16 @@ impl AppInner {
 		self.timer.reset();
 		
 		let center = Vector2::new([self.render_context.config().width as f32 / 2., self.render_context.config().height as f32 / 2.]);
-		let mut angle = self.scene.1.rects_mut()[0].rotation;
-		let radius = self.scene.0.rings_mut()[0].outer_radius;
 
-		if self.input.key_map.is_pressed(key_char!("a")) {angle -= delta * 1.;}
-		if self.input.key_map.is_pressed(key_char!("d")) {angle += delta * 1.;}
+		let cursor_pos = self.input.mouse_map.mouse_position();
+		let len = (cursor_pos - center).mag().min(200.);
+		let angle = (cursor_pos - center).angle();
+		// println!("{:?}", len);
 
 		self.scene.0.rings_mut()[0].position = center;
-		self.scene.1.rects_mut()[0].center = center + (Vector2::rotation(angle) * radius) / 2. * 0.98;
+
+		self.scene.1.rects_mut()[0].center = center + (Vector2::rotation(angle) * len) / 2. * 0.98;
+		self.scene.1.rects_mut()[0].size[0] = len;
 		self.scene.1.rects_mut()[0].rotation = angle;
 
 		self.scene.0.update_rings(&self.render_context);
