@@ -12,7 +12,7 @@ use crate::shader_manager::*;
 
 use crate::rendering::*;
 use crate::timer::Timer;
-use crate::math::Vector2;
+use crate::math::{Vector2, Vector4};
 
 use crate::key_char;
 
@@ -34,7 +34,8 @@ struct AppInner {
 	window: Arc<Window>,
 	render_context: WGPUContext,
 	shader_manager: ShaderManager,
-	scene_manager: SceneManager,
+	renderer: Renderer2D,
+	scene: (RingRenderer, RectangleRenderer),
 	timer: Timer,
 	input: Input,
 }
@@ -54,10 +55,40 @@ impl AppInner {
 		
 		// Create Timer
 		let timer = Timer::new();
+		
+		// Create Renderer
+		let renderer = Renderer2D::new(&render_context);
+
+		// Create scene
+		//  - Ring
+		let center = Vector2::new([render_context.config().width as f32 / 2., render_context.config().height as f32 / 2.]);
+		const RADIUS: f32 = 200.;
+		let rings = vec![
+			Ring {
+				color: Vector4::new([1., 1., 1., 1.]),
+				position: center,
+				outer_radius: RADIUS,
+				inner_radius: RADIUS * 0.9, 
+			}
+		];
+		let rings = RingRenderer::new(rings, renderer.uniform_bind_group_layout(), &render_context, &shader_manager);
+
+		// - Aim Bar
+		const START_ANGLE: f32 = - std::f32::consts::PI / 2.;
+		let rects = vec![
+			CenterRect{
+				color : Vector4::new([1., 1., 1., 1.]),
+				center : center + Vector2::rotation(START_ANGLE) * RADIUS / 2. * 0.98,
+				size : Vector2::new([RADIUS * 0.95, 10.]),
+				rotation : START_ANGLE,
+			}
+		];
+		let rects = RectangleRenderer::new(rects, renderer.uniform_bind_group_layout(), &render_context, &shader_manager);
 
 		Self {
 			window,
-			scene_manager: SceneManager::new(&render_context, &shader_manager),
+			scene: (rings, rects),
+			renderer,
 			render_context,
 			shader_manager,
 			timer,
@@ -68,21 +99,20 @@ impl AppInner {
 	pub fn update_scene(&mut self) {
 		let delta = self.timer.elapsed_reset();
 		self.timer.reset();
-		let scene = self.scene_manager.get_scene_mut();
 		
 		let center = Vector2::new([self.render_context.config().width as f32 / 2., self.render_context.config().height as f32 / 2.]);
-		let mut angle = scene.1.rects_mut()[0].rotation;
-		let radius = scene.0.rings_mut()[0].outer_radius;
+		let mut angle = self.scene.1.rects_mut()[0].rotation;
+		let radius = self.scene.0.rings_mut()[0].outer_radius;
 
 		if self.input.key_map.is_pressed(key_char!("a")) {angle -= delta * 1.;}
 		if self.input.key_map.is_pressed(key_char!("d")) {angle += delta * 1.;}
 
-		scene.0.rings_mut()[0].position = center;
-		scene.1.rects_mut()[0].center = center + (Vector2::rotation(angle) * radius) / 2. * 0.98;
-		scene.1.rects_mut()[0].rotation = angle;
+		self.scene.0.rings_mut()[0].position = center;
+		self.scene.1.rects_mut()[0].center = center + (Vector2::rotation(angle) * radius) / 2. * 0.98;
+		self.scene.1.rects_mut()[0].rotation = angle;
 
-		scene.0.update_rings(&self.render_context);
-		scene.1.update_rects(&self.render_context);
+		self.scene.0.update_rings(&self.render_context);
+		self.scene.1.update_rects(&self.render_context);
 	}
 }
 
@@ -136,12 +166,15 @@ impl winit::application::ApplicationHandler for App {
 			WindowEvent::Resized(new_size) => {
 				// inner.render_context.resize(winit::dpi::PhysicalSize::new(8, 8));
 				inner.render_context.resize(new_size);
-				inner.scene_manager.update_uniform(&inner.render_context);
+				inner.renderer.update_uniform(&inner.render_context);
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
 				inner.update_scene();
-				inner.scene_manager.render_all(&inner.render_context, &inner.shader_manager);
+				inner.renderer.render(
+					[&mut inner.scene.1 as &mut dyn Render, &mut inner.scene.0 as &mut dyn Render], 
+					&inner.render_context, &inner.shader_manager
+				);
 				inner.window.request_redraw();
 			}
 			_ => (),
