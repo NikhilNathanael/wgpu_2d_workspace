@@ -8,6 +8,7 @@ pub mod rendering;
 pub mod shader_manager;
 pub mod wgpu_context;
 pub mod timer;
+pub mod math;
 
 #[cfg(test)]
 mod tests {
@@ -19,3 +20,5 @@ mod tests {
         assert_eq!(result, 4);
     }
 }
+
+// TODO: Finish Gamepad map and gamepad aim-assist

@@ -8,12 +8,13 @@ mod point {
 
 	use bytemuck::{Zeroable, Pod};
 	use crate::vertex_buffer_layout;
+	use crate::math::{Vector2, Vector4};
 
 	#[repr(C)]
 	#[derive(Zeroable, Pod, Clone, Copy, Debug, VertexBufferData)]
 	pub struct Point {
-		pub color: [f32;4],
-		pub position: [f32;2],
+		pub color: Vector4<f32>,
+		pub position: Vector2<f32>,
 	}
 
 	pub struct PointRenderer {
@@ -98,12 +99,13 @@ mod point {
 		}
 	}
 
-	pub fn create_circle_point_list (num_points: usize, radius: f32, center_position: [f32;2]) -> Vec<Point> {
+	pub fn create_circle_point_list (num_points: usize, radius: f32, center_position: Vector2<f32>) -> Vec<Point> {
 		(0..num_points).map(|i| {
 			let angle = i as f32 * 2. * std::f32::consts::PI / num_points as f32;
 			Point{
-				position: [angle.cos() * radius + center_position[0], angle.sin() * radius + center_position[1]],
-				color: [1., 1., 1., 1.],
+				position: Vector2::rotation(angle) * Vector2::new([radius, radius]) + center_position,
+				// position: [angle.cos() * radius + center_position[0], angle.sin() * radius + center_position[1]],
+				color: Vector4::new([1., 1., 1., 1.]),
 			}
 		}).collect::<Vec<_>>()
 	}
@@ -219,14 +221,15 @@ mod rect {
 	use crate::shader_manager::*;
 	use crate::wgpu_context::*;
 	use crate::vertex_buffer_layout;
+	use crate::math::{Vector2, Vector4};
 
 	use bytemuck::{Pod, Zeroable};
 	#[derive(Clone, Copy, Pod, Zeroable, UniformBufferData, VertexBufferData)]
 	#[repr(C)]
 	pub struct CenterRect {
-		pub color: [f32;4],
-		pub center: [f32;2],
-		pub size: [f32; 2],
+		pub color: Vector4<f32>,
+		pub center: Vector2<f32>,
+		pub size: Vector2<f32>,
 		pub rotation: f32,
 	}
 
@@ -425,12 +428,13 @@ mod ring {
 	use crate::vertex_buffer_layout;
 
 	use bytemuck::{Pod, Zeroable};
+	use crate::math::{Vector2, Vector4};
 
 	#[derive(Pod, Zeroable, Clone, Copy, VertexBufferData)]
 	#[repr(C)]
 	pub struct Ring {
-		pub color: [f32;4],
-		pub position: [f32;2],
+		pub color: Vector4<f32>,
+		pub position: Vector2<f32>,
 		pub outer_radius: f32,
 		pub inner_radius: f32,
 	}
@@ -525,6 +529,7 @@ mod texture {
 	use crate::rendering::CenterRect;
 	use crate::wgpu_context::{WGPUContext, BufferAndData};
 	use crate::shader_manager::{RenderPipelineDescriptorTemplate, VertexStateTemplate, FragmentStateTemplate, ShaderManager};
+	use crate::math::{Vector4, Vector2};
 	use wgpu::*;
 
 	struct TextureData {
@@ -601,9 +606,9 @@ mod texture {
 	impl TextureRenderer {
 		pub fn new (uniform_bind_group_layout: &BindGroupLayout, context: &WGPUContext, shader_manager: &ShaderManager) -> Self {
 			let rect = BufferAndData::new(CenterRect{
-				color: [0., 0., 0., 1.],
-				center: [4.5, 3.5],
-				size: [1.0, 1.0], 
+				color: Vector4::new([0., 0., 0., 1.]),
+				center: Vector2::new([4.5, 3.5]),
+				size: Vector2::new([1.0, 1.0]), 
 				rotation: 0.,
 			}, context);
 
@@ -841,6 +846,7 @@ mod scene_manager {
 	use super::*;
 	use crate::wgpu_context::{WGPUContext, BufferAndData};
 	use crate::shader_manager::ShaderManager;
+	use crate::math::*;
 
 	use wgpu::*;
 
@@ -887,11 +893,11 @@ mod scene_manager {
 
 			// Create scene
 			//  - Ring
-			let center = [context.config().width as f32 / 2., context.config().height as f32 / 2.];
+			let center = Vector2::new([context.config().width as f32 / 2., context.config().height as f32 / 2.]);
 			const RADIUS: f32 = 200.;
 			let rings = vec![
 				Ring {
-					color: [1., 1., 1., 1.],
+					color: Vector4::new([1., 1., 1., 1.]),
 					position: center,
 					outer_radius: RADIUS,
 					inner_radius: RADIUS * 0.9, 
@@ -900,12 +906,12 @@ mod scene_manager {
 			let rings = RingRenderer::new(rings, &uniform_bind_group_layout, &context, &shader_manager);
 
 			// - Aim Bar
-			const START_ANGLE: f32 = std::f32::consts::PI / 2.;
+			const START_ANGLE: f32 = - std::f32::consts::PI / 2.;
 			let rects = vec![
 				CenterRect{
-					color : [1., 1., 1., 1.],
-					center : [center[0] + START_ANGLE.cos() * RADIUS / 2. * 0.98, center[1] - START_ANGLE.sin() * RADIUS / 2. * 0.98],
-					size : [RADIUS * 0.95, 10.],
+					color : Vector4::new([1., 1., 1., 1.]),
+					center : center + Vector2::rotation(START_ANGLE) * RADIUS / 2. * 0.98,
+					size : Vector2::new([RADIUS * 0.95, 10.]),
 					rotation : START_ANGLE,
 				}
 			];

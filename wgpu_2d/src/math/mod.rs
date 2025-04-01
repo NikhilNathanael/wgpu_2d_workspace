@@ -12,7 +12,7 @@ mod vector {
 			}
 
 			impl<T: Zeroable> $outer_name<T> {
-				fn new (data: [T;$deref_len]) -> Self {
+				pub fn new (data: [T;$deref_len]) -> Self {
 					let mut output = <[T;$actual_len]>::zeroed();
 					unsafe{(&mut output as *mut [T;$actual_len] as *mut [T;$deref_len]).write(data)};
 					Self {
@@ -21,10 +21,16 @@ mod vector {
 				}
 			}
 
+			impl<T: Copy + Zeroable> From<T> for $outer_name<T> {
+				fn from (data: T) -> Self {
+					Self::new([data;$deref_len])
+				}
+			}
+
 			impl<T> Deref for $outer_name<T> {
 				type Target = [T;$deref_len];
 				fn deref(&self) -> &Self::Target {
-					assert!($deref_len <= $actual_len);
+					debug_assert!($deref_len <= $actual_len);
 					eprintln!("{:?} {:?}", $deref_len, $actual_len);
 					unsafe{&*(self.data.as_ptr().cast())}
 				}
@@ -46,140 +52,411 @@ mod vector {
 	
 	// All add, sub, mul, and div implementations
 	macro_rules! impl_math {
-		($vector_ty: ty, $inner_ty: ty, $($indeces: literal),*) => {
+		($vector_ty: ty, $inner_ty: ty, $($normal_indeces: literal),* $(; $($default_indeces: literal),*)?) => {
 			impl $vector_ty {
-				fn dot (&self, other: Self) -> $inner_ty {
-					strip_plus!($(+ self.data[$indeces] * other.data[$indeces])+)
+				pub fn dot (&self, other: Self) -> $inner_ty {
+					strip_plus!($(+ self.data[$normal_indeces] * other.data[$normal_indeces])+)
 				}
 			}
 
-			impl<'a> Add<&'a $vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn add(self, other: &'a $vector_ty) -> Self::Output {
-					Self::Output {
-						data: [
-							$(self.data[$indeces] + other.data[$indeces]),+,
-						]
+			// Vector x Scalar
+				impl<'a> Add<&'a $inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn add(self, other: &'a $inner_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] + other),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
 					}
 				}
-			}
 
-			impl<'a> Add<&'a $vector_ty> for $vector_ty {
-				type Output = Self;
-				fn add (self, other: &'a $vector_ty) -> Self {
-					&self + other
-				}
-			}
-
-			impl<'a> Add<$vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn add (self, other: $vector_ty) -> $vector_ty {
-					self + &other
-				}
-			}
-
-			impl Add<$vector_ty> for $vector_ty {
-				type Output = Self;
-				fn add (self, other: Self) -> Self {
-					&self + &other
-				}
-			}
-
-			impl<'a> Sub<&'a $vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn sub(self, other: &'a $vector_ty) -> Self::Output {
-					Self::Output {
-						data: [
-							$(self.data[$indeces] - other.data[$indeces]),+,
-						]
+				impl<'a> Add<&'a $inner_ty> for $vector_ty {
+					type Output = Self;
+					fn add (self, other: &'a $inner_ty) -> Self {
+						&self + other
 					}
 				}
-			}
 
-			impl<'a> Sub<&'a $vector_ty> for $vector_ty {
-				type Output = Self;
-				fn sub (self, other: &'a $vector_ty) -> Self {
-					&self - other
-				}
-			}
-
-			impl<'a> Sub<$vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn sub (self, other: $vector_ty) -> $vector_ty {
-					self - &other
-				}
-			}
-
-			impl Sub<$vector_ty> for $vector_ty {
-				type Output = Self;
-				fn sub (self, other: Self) -> Self {
-					&self - &other
-				}
-			}
-
-			impl<'a> Mul<&'a $vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn mul(self, other: &'a $vector_ty) -> Self::Output {
-					Self::Output {
-						data: [
-							$(self.data[$indeces] * other.data[$indeces]),+,
-						]
+				impl<'a> Add<$inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn add (self, other: $inner_ty) -> $vector_ty {
+						self + &other
 					}
 				}
-			}
 
-			impl<'a> Mul<&'a $vector_ty> for $vector_ty {
-				type Output = Self;
-				fn mul (self, other: &'a $vector_ty) -> Self {
-					&self * other
-				}
-			}
-
-			impl<'a> Mul<$vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn mul (self, other: $vector_ty) -> $vector_ty {
-					self * &other
-				}
-			}
-
-			impl Mul<$vector_ty> for $vector_ty {
-				type Output = Self;
-				fn mul (self, other: Self) -> Self {
-					&self * &other
-				}
-			}
-
-			impl<'a> Div<&'a $vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn div(self, other: &'a $vector_ty) -> Self::Output {
-					Self::Output {
-						data: [
-							$(self.data[$indeces] / other.data[$indeces]),+,
-						]
+				impl Add<$inner_ty> for $vector_ty {
+					type Output = Self;
+					fn add (self, other: $inner_ty) -> Self {
+						&self + &other
 					}
 				}
-			}
 
-			impl<'a> Div<&'a $vector_ty> for $vector_ty {
-				type Output = Self;
-				fn div (self, other: &'a $vector_ty) -> Self {
-					&self / other
+				impl<'a> Sub<&'a $inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn sub(self, other: &'a $inner_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] - other),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
 				}
-			}
 
-			impl<'a> Div<$vector_ty> for &'a $vector_ty {
-				type Output = $vector_ty;
-				fn div (self, other: $vector_ty) -> $vector_ty {
-					self / &other
+				impl<'a> Sub<&'a $inner_ty> for $vector_ty {
+					type Output = Self;
+					fn sub (self, other: &'a $inner_ty) -> Self {
+						&self - other
+					}
 				}
-			}
 
-			impl Div<$vector_ty> for $vector_ty {
-				type Output = Self;
-				fn div (self, other: Self) -> Self {
-					&self / &other
+				impl<'a> Sub<$inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn sub (self, other: $inner_ty) -> $vector_ty {
+						self - &other
+					}
 				}
-			}
+
+				impl Sub<$inner_ty> for $vector_ty {
+					type Output = Self;
+					fn sub (self, other: $inner_ty) -> Self {
+						&self - &other
+					}
+				}
+
+				impl<'a> Mul<&'a $inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn mul(self, other: &'a $inner_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] * other),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Mul<&'a $inner_ty> for $vector_ty {
+					type Output = Self;
+					fn mul (self, other: &'a $inner_ty) -> Self {
+						&self * other
+					}
+				}
+
+				impl<'a> Mul<$inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn mul (self, other: $inner_ty) -> $vector_ty {
+						self * &other
+					}
+				}
+
+				impl Mul<$inner_ty> for $vector_ty {
+					type Output = Self;
+					fn mul (self, other: $inner_ty) -> Self {
+						&self * &other
+					}
+				}
+
+				impl<'a> Div<&'a $inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn div(self, other: &'a $inner_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] / other),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Div<&'a $inner_ty> for $vector_ty {
+					type Output = Self;
+					fn div (self, other: &'a $inner_ty) -> Self {
+						&self / other
+					}
+				}
+
+				impl<'a> Div<$inner_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn div (self, other: $inner_ty) -> $vector_ty {
+						self / &other
+					}
+				}
+
+				impl Div<$inner_ty> for $vector_ty {
+					type Output = Self;
+					fn div (self, other: $inner_ty) -> Self {
+						&self / &other
+					}
+				}
+
+			// Scalar x Vector
+				impl<'a> Add<&'a $vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn add(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self + other.data[$normal_indeces]),+,
+								$($(other.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Add<&'a $vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn add (self, other: &'a $vector_ty) -> Self::Output {
+						&self + other
+					}
+				}
+
+				impl<'a> Add<$vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn add (self, other: $vector_ty) -> $vector_ty {
+						self + &other
+					}
+				}
+
+				impl Add<$vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn add (self, other: $vector_ty) -> Self::Output {
+						&self + &other
+					}
+				}
+
+				impl<'a> Sub<&'a $vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn sub(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self - other.data[$normal_indeces]),+,
+								$($(other.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Sub<&'a $vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn sub (self, other: &'a $vector_ty) -> Self::Output {
+						&self - other
+					}
+				}
+
+				impl<'a> Sub<$vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn sub (self, other: $vector_ty) -> $vector_ty {
+						self - &other
+					}
+				}
+
+				impl Sub<$vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn sub (self, other: $vector_ty) -> Self::Output {
+						&self - &other
+					}
+				}
+
+				impl<'a> Mul<&'a $vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn mul(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self * other.data[$normal_indeces]),+,
+								$($(other.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Mul<&'a $vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn mul (self, other: &'a $vector_ty) -> Self::Output {
+						&self * other
+					}
+				}
+
+				impl<'a> Mul<$vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn mul (self, other: $vector_ty) -> $vector_ty {
+						self * &other
+					}
+				}
+
+				impl Mul<$vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn mul (self, other: $vector_ty) -> Self::Output {
+						&self * &other
+					}
+				}
+
+				impl<'a> Div<&'a $vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn div(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self / other.data[$normal_indeces]),+,
+								$($(other.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Div<&'a $vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn div (self, other: &'a $vector_ty) -> Self::Output {
+						&self / other
+					}
+				}
+
+				impl<'a> Div<$vector_ty> for &'a $inner_ty {
+					type Output = $vector_ty;
+					fn div (self, other: $vector_ty) -> $vector_ty {
+						self / &other
+					}
+				}
+
+				impl Div<$vector_ty> for $inner_ty {
+					type Output = $vector_ty;
+					fn div (self, other: $vector_ty) -> Self::Output {
+						&self / &other
+					}
+				}
+
+			// Vector x Vector
+				impl<'a> Add<&'a $vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn add(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] + other.data[$normal_indeces]),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Add<&'a $vector_ty> for $vector_ty {
+					type Output = Self;
+					fn add (self, other: &'a $vector_ty) -> Self {
+						&self + other
+					}
+				}
+
+				impl<'a> Add<$vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn add (self, other: $vector_ty) -> $vector_ty {
+						self + &other
+					}
+				}
+
+				impl Add<$vector_ty> for $vector_ty {
+					type Output = Self;
+					fn add (self, other: Self) -> Self {
+						&self + &other
+					}
+				}
+
+				impl<'a> Sub<&'a $vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn sub(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] - other.data[$normal_indeces]),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Sub<&'a $vector_ty> for $vector_ty {
+					type Output = Self;
+					fn sub (self, other: &'a $vector_ty) -> Self {
+						&self - other
+					}
+				}
+
+				impl<'a> Sub<$vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn sub (self, other: $vector_ty) -> $vector_ty {
+						self - &other
+					}
+				}
+
+				impl Sub<$vector_ty> for $vector_ty {
+					type Output = Self;
+					fn sub (self, other: Self) -> Self {
+						&self - &other
+					}
+				}
+
+				impl<'a> Mul<&'a $vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn mul(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] * other.data[$normal_indeces]),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Mul<&'a $vector_ty> for $vector_ty {
+					type Output = Self;
+					fn mul (self, other: &'a $vector_ty) -> Self {
+						&self * other
+					}
+				}
+
+				impl<'a> Mul<$vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn mul (self, other: $vector_ty) -> $vector_ty {
+						self * &other
+					}
+				}
+
+				impl Mul<$vector_ty> for $vector_ty {
+					type Output = Self;
+					fn mul (self, other: Self) -> Self {
+						&self * &other
+					}
+				}
+
+				impl<'a> Div<&'a $vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn div(self, other: &'a $vector_ty) -> Self::Output {
+						Self::Output {
+							data: [
+								$(self.data[$normal_indeces] / other.data[$normal_indeces]),+,
+								$($(self.data[$default_indeces]),*)?
+							]
+						}
+					}
+				}
+
+				impl<'a> Div<&'a $vector_ty> for $vector_ty {
+					type Output = Self;
+					fn div (self, other: &'a $vector_ty) -> Self {
+						&self / other
+					}
+				}
+
+				impl<'a> Div<$vector_ty> for &'a $vector_ty {
+					type Output = $vector_ty;
+					fn div (self, other: $vector_ty) -> $vector_ty {
+						self / &other
+					}
+				}
+
+				impl Div<$vector_ty> for $vector_ty {
+					type Output = Self;
+					fn div (self, other: Self) -> Self {
+						&self / &other
+					}
+				}
 		}
 	}
 
@@ -270,9 +547,21 @@ mod vector {
 		}
 	}
 
+	// 2D Rotations 
+	impl Vector2<f32> {
+		pub fn rotation(angle: f32) -> Self {
+			Self {
+				data: [
+					angle.cos(),
+					angle.sin(),
+				]
+			}
+		}
+	}
+
 	// Cross Product is only available in 3 dimensions
 	impl Vector3<f32> {
-		fn cross_product (&self, other: &Self) -> Self {
+		pub fn cross_product (&self, other: &Self) -> Self {
 			Self {
 				data: [
 					self.data[1] * other.data[2] - self.data[2] * other.data[1],
@@ -285,7 +574,7 @@ mod vector {
 	}
 
 	impl Vector3<i32> {
-		fn cross_product (&self, other: &Self) -> Self {
+		pub fn cross_product (&self, other: &Self) -> Self {
 			Self {
 				data: [
 					self.data[1] * other.data[2] - self.data[2] * other.data[1],
@@ -302,31 +591,24 @@ mod vector {
 	impl_def!(Vector4, 4, 4);
 
 	use std::ops::{Add, Sub, Mul, Div};
-	use super::*;
 	impl_math!(Vector2<f32>, f32, 0, 1);
 	impl_math!(Vector2<i32>, i32, 0, 1);
 
 	impl_math!(Vector3<f32>, f32, 0, 1, 2, 3);
+	impl_math!(Vector3<i32>, i32, 0, 1, 2; 3);
 
 	impl_math!(Vector4<f32>, f32, 0, 1, 2, 3);
+	impl_math!(Vector4<i32>, i32, 0, 1, 2, 3);
 
-	use rand::{Rng, rng};
 	mod vector2_f32_tests{
-		use rand::{Rng, rng};
-		use super::*;
 		impl_math_tests!(f32, Vector2, 2, 0, 1);
 	}
 	mod vector3_f32_tests{
-		use rand::{Rng, rng};
-		use super::*;
 		impl_math_tests!(f32, Vector3, 3, 0, 1, 2);
 	}
 	mod vector4_f32_tests{
-		use rand::{Rng, rng};
-		use super::*;
 		impl_math_tests!(f32, Vector4, 4, 0, 1, 2, 3);
 	}
 }
 
 pub use vector::*;
-

@@ -1,18 +1,18 @@
 use std::sync::Arc;
 
-use mouse_map::MouseMap;
+use crate::input::*;
 
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 use winit::event::{DeviceEvent, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
-use super::wgpu_context::*;
-use super::input::*;
-use super::shader_manager::*;
+use crate::wgpu_context::*;
+use crate::shader_manager::*;
 
 use crate::rendering::*;
 use crate::timer::Timer;
+use crate::math::Vector2;
 
 use crate::key_char;
 
@@ -70,15 +70,15 @@ impl AppInner {
 		self.timer.reset();
 		let scene = self.scene_manager.get_scene_mut();
 		
-		let center = [self.render_context.config().width as f32 / 2., self.render_context.config().height as f32 / 2.];
+		let center = Vector2::new([self.render_context.config().width as f32 / 2., self.render_context.config().height as f32 / 2.]);
 		let mut angle = scene.1.rects_mut()[0].rotation;
 		let radius = scene.0.rings_mut()[0].outer_radius;
 
-		if self.input.key_map.is_pressed(key_char!("a")) {angle += delta * 1.;}
-		if self.input.key_map.is_pressed(key_char!("d")) {angle -= delta * 1.;}
+		if self.input.key_map.is_pressed(key_char!("a")) {angle -= delta * 1.;}
+		if self.input.key_map.is_pressed(key_char!("d")) {angle += delta * 1.;}
 
 		scene.0.rings_mut()[0].position = center;
-		scene.1.rects_mut()[0].center = [center[0] + angle.cos() * radius / 2. * 0.98, center[1] - angle.sin() * radius / 2. * 0.98];
+		scene.1.rects_mut()[0].center = center + (Vector2::rotation(angle) * radius) / 2. * 0.98;
 		scene.1.rects_mut()[0].rotation = angle;
 
 		scene.0.update_rings(&self.render_context);
@@ -101,12 +101,7 @@ impl winit::application::ApplicationHandler for App {
 		}
 	}
 
-	fn device_event(
-        &mut self,
-        _event_loop: &ActiveEventLoop,
-        _device_id: winit::event::DeviceId,
-        event: winit::event::DeviceEvent,
-    ) {
+	fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: winit::event::DeviceId, event: winit::event::DeviceEvent) {
 		let inner = self.inner.as_mut().unwrap();
 		match event {
 			DeviceEvent::MouseMotion{delta} => inner.input.mouse_map.handle_raw_mouse_movement(delta),
@@ -132,7 +127,7 @@ impl winit::application::ApplicationHandler for App {
 			WindowEvent::CursorMoved{position,..} => {
 				inner.input.mouse_map.handle_cursor_movement(position);
 			}
-			WindowEvent::MouseWheel{delta,..} => {
+			WindowEvent::MouseWheel{delta, ..} => {
 				inner.input.mouse_map.handle_mouse_scroll(delta);
 			}
 			WindowEvent::MouseInput{button, state, ..} => {
@@ -157,6 +152,7 @@ impl winit::application::ApplicationHandler for App {
 struct Input {
 	key_map: KeyMap,
 	mouse_map: MouseMap,
+	gamepad_map: GamepadMap
 }
 
 impl Input {
@@ -164,6 +160,7 @@ impl Input {
 		Self {
 			key_map: KeyMap::new(),
 			mouse_map: MouseMap::new(),
+			gamepad_map: GamepadMap::new(),
 		}
 	}
 }
