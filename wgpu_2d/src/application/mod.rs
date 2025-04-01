@@ -35,9 +35,9 @@ struct AppInner {
 	render_context: WGPUContext,
 	shader_manager: ShaderManager,
 	renderer: Renderer2D,
-	scene: (RingRenderer, RectangleRenderer),
 	timer: Timer,
 	input: Input,
+	scene: (RingRenderer, RectangleRenderer),
 }
 
 impl AppInner {
@@ -47,11 +47,11 @@ impl AppInner {
 		// Create shader_manager
 		let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
 
-		// Create key map
+		// Create input manager
 		let input = Input::new();
 		
 		// Create WGPU context
-		let render_context = WGPUContext::new(Arc::clone(&window));
+		let render_context = WGPUContext::new(Arc::clone(&window), [window.inner_size().width, window.inner_size().height]);
 		
 		// Create Timer
 		let timer = Timer::new();
@@ -165,11 +165,12 @@ impl winit::application::ApplicationHandler for App {
 			}
 			WindowEvent::Resized(new_size) => {
 				// inner.render_context.resize(winit::dpi::PhysicalSize::new(8, 8));
-				inner.render_context.resize(new_size);
+				inner.render_context.resize([new_size.width, new_size.height]);
 				inner.renderer.update_uniform(&inner.render_context);
 				inner.window.request_redraw();
 			},
 			WindowEvent::RedrawRequested => {
+				inner.input.gamepad_map.update();
 				inner.update_scene();
 				inner.renderer.render(
 					[&mut inner.scene.1 as &mut dyn Render, &mut inner.scene.0 as &mut dyn Render], 
@@ -197,4 +198,3 @@ impl Input {
 		}
 	}
 }
-

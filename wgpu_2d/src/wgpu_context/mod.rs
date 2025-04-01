@@ -1,5 +1,4 @@
 use wgpu::*;
-use winit::dpi::PhysicalSize;
 
 pub const SHADER_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders/");
 pub use buffers::*;
@@ -16,13 +15,12 @@ pub struct WGPUContext {
 }
 
 impl WGPUContext {
-	pub fn new(window: std::sync::Arc<winit::window::Window>) -> Self {
+	pub fn new(window: impl Into<SurfaceTarget<'static>>, size: [u32; 2]) -> Self {
 		let instance = Instance::new(&wgpu::InstanceDescriptor{
 			backends: wgpu::Backends::VULKAN,
 			flags: InstanceFlags::DEBUG | InstanceFlags::VALIDATION,
 			..Default::default()
 		});
-		let size = window.inner_size();
 		let surface = instance.create_surface(window)
 			.expect("Could not create surface");
 
@@ -36,8 +34,8 @@ impl WGPUContext {
 		let config = wgpu::SurfaceConfiguration {
 			usage: TextureUsages::RENDER_ATTACHMENT,
 			format: capabilities.formats[0],
-			width: size.width,
-			height: size.height,
+			width: size[0],
+			height: size[1],
 			present_mode: wgpu::PresentMode::Immediate,
 			desired_maximum_frame_latency: 0,
 			alpha_mode: CompositeAlphaMode::Auto,
@@ -89,9 +87,9 @@ impl WGPUContext {
 		&self.config
 	}
 
-	pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-		self.config.width = new_size.width;
-		self.config.height = new_size.height;
+	pub fn resize(&mut self, new_size: [u32;2]) {
+		self.config.width = new_size[0];
+		self.config.height = new_size[1];
 		self.surface.configure(&self.device, &self.config);
 	}
 
