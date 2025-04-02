@@ -6,11 +6,16 @@ pub mod input;
 pub mod timer;
 pub mod math;
 pub mod system;
+use system::*;
 
 pub mod application;
 use application::*;
 
 fn main () {
+	let mut scheduler = Scheduler::new();
+	scheduler.add_resource(25_i32);
+	scheduler.run_schedule(Schedule::Startup);
+
 	simple_logger::SimpleLogger::new()
 		.with_level(log::LevelFilter::Off)
 		.with_module_level("wgpu_2d", log::LevelFilter::Info)
