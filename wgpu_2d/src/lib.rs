@@ -2,14 +2,14 @@ pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
-pub mod application;
+pub use winit;
+
 pub mod input;
 pub mod rendering;
 pub mod shader_manager;
 pub mod wgpu_context;
 pub mod timer;
 pub mod math;
-pub mod system;
 
 #[cfg(test)]
 mod tests {
@@ -25,3 +25,27 @@ mod tests {
 // TODO: Finish Gamepad map and gamepad aim-assist
 // TODO: Remove winit as dependancy of lib and make users directly 
 //       use winit instead
+//
+// (Finished) : Timer struct
+// 		- total time since start
+// 		- time since last reset (usually last frame)
+// 		- integer based (No floating point precision issues)
+// (Finished) : Shader Compilation Manager
+// 		- Automatically reads and compiles shaders in shader directory
+// 		- Hot-reloading
+// 		- caches pipelines as well as modules
+// (Finished) : Add Include files to shader manager
+// 		- read the shader input and check for any `#include "<file_name>"` fragments
+// 		- read the file indicated by that name and include it in that location
+// (Finished) : Add Transparency blending
+// (Finished) : Add derive macros for Buffer data
+// 		- One macro for Vertex data
+// 		- One macro for Uniform data
+// TODO : Unify the renderers for each type of primitive (point, triangle, 
+//        center_rect and circle for now) into a single struct with a generic parameter
+//      - Define a trait for each type of primitive
+//      	- This trait should include
+//      		- registering shaders
+//      		- registering pipelines
+//      		- creation of bind group layout
+//      		- creation of bind groups
