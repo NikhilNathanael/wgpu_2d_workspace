@@ -1,14 +1,14 @@
-pub use winit;
 pub use my_ecs;
+pub use winit;
 
 pub mod input;
+pub mod math;
 pub mod rendering;
 pub mod shader_manager;
-pub mod wgpu_context;
 pub mod timer;
-pub mod math;
+pub mod wgpu_context;
 
-#[cfg(feature="ecs")]
+#[cfg(feature = "ecs")]
 pub mod ecs;
 
 #[cfg(test)]
@@ -23,7 +23,7 @@ mod tests {
 }
 
 // TODO: Finish Gamepad map and gamepad aim-assist
-// TODO: Remove winit as dependancy of lib and make users directly 
+// TODO: Remove winit as dependancy of lib and make users directly
 //       use winit instead
 //
 // (Finished) : Timer struct
@@ -41,7 +41,7 @@ mod tests {
 // (Finished) : Add derive macros for Buffer data
 // 		- One macro for Vertex data
 // 		- One macro for Uniform data
-// TODO : Unify the renderers for each type of primitive (point, triangle, 
+// TODO : Unify the renderers for each type of primitive (point, triangle,
 //        center_rect and circle for now) into a single struct with a generic parameter
 //      - Define a trait for each type of primitive
 //      	- This trait should include

@@ -1,73 +1,75 @@
 mod vector {
-	use bytemuck::{Pod, Zeroable};
-	use std::ops::{Deref, DerefMut};
-	use std::mem::MaybeUninit;
+    use bytemuck::{Pod, Zeroable};
+    use std::mem::MaybeUninit;
+    use std::ops::{Deref, DerefMut};
 
-	// Definition of Vector types
-	macro_rules! impl_def {
-		($outer_name: tt, $actual_len: literal, $deref_len: literal) => {
-			#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-			#[repr(transparent)]
-			pub struct $outer_name<T> {
-				data: [T;$actual_len]
-			}
+    // Definition of Vector types
+    macro_rules! impl_def {
+        ($outer_name: tt, $actual_len: literal, $deref_len: literal) => {
+            #[derive(Debug, Clone, Copy, Pod, Zeroable)]
+            #[repr(transparent)]
+            pub struct $outer_name<T> {
+                data: [T; $actual_len],
+            }
 
-			impl<T: Zeroable> $outer_name<T> {
-				pub fn new (data: [T;$deref_len]) -> Self {
-					let mut output = <[T;$actual_len]>::zeroed();
-					unsafe{(&mut output as *mut [T;$actual_len] as *mut [T;$deref_len]).write(data)};
-					Self {
-						data: output,
-					}
-				}
-			}
-			impl<T> $outer_name<T> {
-				pub fn into_inner(self) -> [T;$deref_len] {
-					let mut data = MaybeUninit::new(self.data);
-					// Drop extra elements
-					let slice_ptr = std::ptr::slice_from_raw_parts_mut(
-						// SAFETY: Slice only includes elements from array
-						unsafe{data.as_mut_ptr().cast::<T>().add($deref_len)},
-						$actual_len - $deref_len
-					);
-					// SAFETY: All elements in slice are still valid
-					unsafe{std::ptr::drop_in_place(slice_ptr)}
-					// SAFETY: Elements of array upto $deref_len are still valid
-					unsafe{data.as_ptr().cast::<[T;$deref_len]>().read()}
-				}
-			}
+            impl<T: Zeroable> $outer_name<T> {
+                pub fn new(data: [T; $deref_len]) -> Self {
+                    let mut output = <[T; $actual_len]>::zeroed();
+                    unsafe {
+                        (&mut output as *mut [T; $actual_len] as *mut [T; $deref_len]).write(data)
+                    };
+                    Self { data: output }
+                }
+            }
+            impl<T> $outer_name<T> {
+                pub fn into_inner(self) -> [T; $deref_len] {
+                    let mut data = MaybeUninit::new(self.data);
+                    // Drop extra elements
+                    let slice_ptr = std::ptr::slice_from_raw_parts_mut(
+                        // SAFETY: Slice only includes elements from array
+                        unsafe { data.as_mut_ptr().cast::<T>().add($deref_len) },
+                        $actual_len - $deref_len,
+                    );
+                    // SAFETY: All elements in slice are still valid
+                    unsafe { std::ptr::drop_in_place(slice_ptr) }
+                    // SAFETY: Elements of array upto $deref_len are still valid
+                    unsafe { data.as_ptr().cast::<[T; $deref_len]>().read() }
+                }
+            }
 
-			impl<T: Copy + Zeroable> From<T> for $outer_name<T> {
-				fn from (data: T) -> Self {
-					Self::new([data;$deref_len])
-				}
-			}
+            impl<T: Copy + Zeroable> From<T> for $outer_name<T> {
+                fn from(data: T) -> Self {
+                    Self::new([data; $deref_len])
+                }
+            }
 
-			impl<T> Deref for $outer_name<T> {
-				type Target = [T;$deref_len];
-				fn deref(&self) -> &Self::Target {
-					debug_assert!($deref_len <= $actual_len);
-					eprintln!("{:?} {:?}", $deref_len, $actual_len);
-					unsafe{&*(self.data.as_ptr().cast())}
-				}
-			}
+            impl<T> Deref for $outer_name<T> {
+                type Target = [T; $deref_len];
+                fn deref(&self) -> &Self::Target {
+                    debug_assert!($deref_len <= $actual_len);
+                    eprintln!("{:?} {:?}", $deref_len, $actual_len);
+                    unsafe { &*(self.data.as_ptr().cast()) }
+                }
+            }
 
-			impl<T> DerefMut for $outer_name<T> {
-				fn deref_mut(&mut self) -> &mut Self::Target {
-					debug_assert!($deref_len <= $actual_len);
-					unsafe{&mut *(self.data.as_mut_ptr().cast())}
-				}
-			}
-		}
-	}
+            impl<T> DerefMut for $outer_name<T> {
+                fn deref_mut(&mut self) -> &mut Self::Target {
+                    debug_assert!($deref_len <= $actual_len);
+                    unsafe { &mut *(self.data.as_mut_ptr().cast()) }
+                }
+            }
+        };
+    }
 
-	// Used in dot product implementation
-	macro_rules! strip_plus {
-		(+ $rest: expr) => {$rest};
-	}
-	
-	// All add, sub, mul, and div implementations
-	macro_rules! impl_math {
+    // Used in dot product implementation
+    macro_rules! strip_plus {
+        (+ $rest: expr) => {
+            $rest
+        };
+    }
+
+    // All add, sub, mul, and div implementations
+    macro_rules! impl_math {
 		($vector_ty: ty, $inner_ty: ty, $($normal_indeces: literal),* $(; $($default_indeces: literal),*)?) => {
 			impl $vector_ty {
 				pub fn dot (&self, other: &Self) -> $inner_ty {
@@ -476,8 +478,8 @@ mod vector {
 		}
 	}
 
-	// tests for the above implemenations
-	macro_rules! impl_math_tests {
+    // tests for the above implemenations
+    macro_rules! impl_math_tests {
 		($inner_ty: ty, $outer_ty: tt, $size: literal, $($indeces: literal),+) => {
 			#[cfg(test)]
 			#[test]
@@ -563,29 +565,26 @@ mod vector {
 		}
 	}
 
-	// 2D Rotations 
-	impl Vector2<f32> {
-		pub fn rotation(angle: f32) -> Self {
-			Self {
-				data: [
-					angle.cos(),
-					angle.sin(),
-				]
-			}
-		}
+    // 2D Rotations
+    impl Vector2<f32> {
+        pub fn rotation(angle: f32) -> Self {
+            Self {
+                data: [angle.cos(), angle.sin()],
+            }
+        }
 
-		pub fn rotate(&self, angle: f32) -> Self {
-			Self {
-				data: [
-					self.data[0] * angle.cos() - self.data[1] * angle.sin(),
-					self.data[0] * angle.sin() + self.data[1] * angle.cos(),
-				]
-			}
-		}
-	}
+        pub fn rotate(&self, angle: f32) -> Self {
+            Self {
+                data: [
+                    self.data[0] * angle.cos() - self.data[1] * angle.sin(),
+                    self.data[0] * angle.sin() + self.data[1] * angle.cos(),
+                ],
+            }
+        }
+    }
 
-	// Magnitude is only supported for float vectors
-	macro_rules! mag_impl {
+    // Magnitude is only supported for float vectors
+    macro_rules! mag_impl {
 		($outer_ty: ident, $inner_ty: ident;$($index: literal),+) => {
 			impl $outer_ty<$inner_ty> {
 				pub fn mag(&self) -> $inner_ty {
@@ -601,78 +600,78 @@ mod vector {
 		}
 	}
 
-	mag_impl!(Vector2, f32; 0, 1);
-	mag_impl!(Vector2, f64; 0, 1);
-	mag_impl!(Vector3, f32; 0, 1, 2);
-	mag_impl!(Vector3, f64; 0, 1, 2);
-	mag_impl!(Vector4, f32; 0, 1, 2, 3);
-	mag_impl!(Vector4, f64; 0, 1, 2, 3);
+    mag_impl!(Vector2, f32; 0, 1);
+    mag_impl!(Vector2, f64; 0, 1);
+    mag_impl!(Vector3, f32; 0, 1, 2);
+    mag_impl!(Vector3, f64; 0, 1, 2);
+    mag_impl!(Vector4, f32; 0, 1, 2, 3);
+    mag_impl!(Vector4, f64; 0, 1, 2, 3);
 
-	// Angle is only implemented for float vectors 
-	impl Vector2<f32> {
-		pub fn angle(&self) -> f32 {
-			self.data[1].atan2(self.data[0])
-		}
-	}
-	impl Vector2<f64> {
-		pub fn angle(&self) -> f64 {
-			self.data[1].atan2(self.data[0])
-		}
-	}
+    // Angle is only implemented for float vectors
+    impl Vector2<f32> {
+        pub fn angle(&self) -> f32 {
+            self.data[1].atan2(self.data[0])
+        }
+    }
+    impl Vector2<f64> {
+        pub fn angle(&self) -> f64 {
+            self.data[1].atan2(self.data[0])
+        }
+    }
 
-	// Cross Product is only available in 3 dimensions
-	impl Vector3<f32> {
-		pub fn cross_product (&self, other: &Self) -> Self {
-			Self {
-				data: [
-					self.data[1] * other.data[2] - self.data[2] * other.data[1],
-					- self.data[0] * other.data[2] + self.data[2] * other.data[0],
-					self.data[0] * other.data[1] - self.data[1] * other.data[0],
-					0.
-				]
-			}
-		}
-	}
+    // Cross Product is only available in 3 dimensions
+    impl Vector3<f32> {
+        pub fn cross_product(&self, other: &Self) -> Self {
+            Self {
+                data: [
+                    self.data[1] * other.data[2] - self.data[2] * other.data[1],
+                    -self.data[0] * other.data[2] + self.data[2] * other.data[0],
+                    self.data[0] * other.data[1] - self.data[1] * other.data[0],
+                    0.,
+                ],
+            }
+        }
+    }
 
-	impl Vector3<i32> {
-		pub fn cross_product (&self, other: &Self) -> Self {
-			Self {
-				data: [
-					self.data[1] * other.data[2] - self.data[2] * other.data[1],
-					- self.data[0] * other.data[2] + self.data[2] * other.data[0],
-					self.data[0] * other.data[1] - self.data[1] * other.data[0],
-					0
-				]
-			}
-		}
-	}
+    impl Vector3<i32> {
+        pub fn cross_product(&self, other: &Self) -> Self {
+            Self {
+                data: [
+                    self.data[1] * other.data[2] - self.data[2] * other.data[1],
+                    -self.data[0] * other.data[2] + self.data[2] * other.data[0],
+                    self.data[0] * other.data[1] - self.data[1] * other.data[0],
+                    0,
+                ],
+            }
+        }
+    }
 
-	impl_def!(Vector2, 2, 2);
-	impl_def!(Vector3, 4, 3);
-	impl_def!(Vector4, 4, 4);
+    impl_def!(Vector2, 2, 2);
+    impl_def!(Vector3, 4, 3);
+    impl_def!(Vector4, 4, 4);
 
-	use std::ops::{Add, Sub, Mul, Div};
-	impl_math!(Vector2<f32>, f32, 0, 1);
-	impl_math!(Vector2<f64>, f64, 0, 1);
-	impl_math!(Vector2<i32>, i32, 0, 1);
+    use std::ops::{Add, Div, Mul, Sub};
+    impl_math!(Vector2<f32>, f32, 0, 1);
+    impl_math!(Vector2<f64>, f64, 0, 1);
+    impl_math!(Vector2<i32>, i32, 0, 1);
 
-	impl_math!(Vector3<f32>, f32, 0, 1, 2, 3);
-	impl_math!(Vector3<f64>, f64, 0, 1, 2, 3);
-	impl_math!(Vector3<i32>, i32, 0, 1, 2; 3);
+    impl_math!(Vector3<f32>, f32, 0, 1, 2, 3);
+    impl_math!(Vector3<f64>, f64, 0, 1, 2, 3);
+    impl_math!(Vector3<i32>, i32, 0, 1, 2; 3);
 
-	impl_math!(Vector4<f32>, f32, 0, 1, 2, 3);
-	impl_math!(Vector4<f64>, f64, 0, 1, 2, 3);
-	impl_math!(Vector4<i32>, i32, 0, 1, 2, 3);
+    impl_math!(Vector4<f32>, f32, 0, 1, 2, 3);
+    impl_math!(Vector4<f64>, f64, 0, 1, 2, 3);
+    impl_math!(Vector4<i32>, i32, 0, 1, 2, 3);
 
-	mod vector2_f32_tests{
-		impl_math_tests!(f32, Vector2, 2, 0, 1);
-	}
-	mod vector3_f32_tests{
-		impl_math_tests!(f32, Vector3, 3, 0, 1, 2);
-	}
-	mod vector4_f32_tests{
-		impl_math_tests!(f32, Vector4, 4, 0, 1, 2, 3);
-	}
+    mod vector2_f32_tests {
+        impl_math_tests!(f32, Vector2, 2, 0, 1);
+    }
+    mod vector3_f32_tests {
+        impl_math_tests!(f32, Vector3, 3, 0, 1, 2);
+    }
+    mod vector4_f32_tests {
+        impl_math_tests!(f32, Vector4, 4, 0, 1, 2, 3);
+    }
 }
 
 pub use vector::*;
