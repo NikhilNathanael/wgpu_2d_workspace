@@ -1,7 +1,9 @@
+use std::f32::consts::PI;
 use std::sync::Arc;
 
 use crate::input::*;
 
+use gamepad_input::{GamepadID, XInputGamepad};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 use winit::event::{DeviceEvent, WindowEvent};
@@ -13,8 +15,6 @@ use crate::shader_manager::*;
 use crate::rendering::*;
 use crate::timer::Timer;
 use crate::math::{Vector2, Vector4};
-
-use crate::key_char;
 
 pub struct App{
 	title: &'static str,
@@ -38,6 +38,7 @@ struct AppInner {
 	timer: Timer,
 	input: Input,
 	scene: (RingRenderer, RectangleRenderer),
+	gamepad: Option<XInputGamepad>,
 }
 
 impl AppInner {
@@ -74,7 +75,7 @@ impl AppInner {
 		let rings = RingRenderer::new(rings, renderer.uniform_bind_group_layout(), &render_context, &shader_manager);
 
 		// - Aim Bar
-		const START_ANGLE: f32 = - std::f32::consts::PI / 2.;
+		const START_ANGLE: f32 = - PI / 2.;
 		let rects = vec![
 			CenterRect{
 				color : Vector4::new([1., 1., 1., 1.]),
@@ -93,25 +94,76 @@ impl AppInner {
 			shader_manager,
 			timer,
 			input,
+			gamepad: None,
 		}
 	}
 
 	pub fn update_scene(&mut self) {
+		// Handle Gamepad state
+		match self.gamepad {
+			None => self.gamepad = self.input.gamepad_map.current(GamepadID::Id_0).copied(),
+			Some(ref mut gamepad) => {
+				match (self.input.gamepad_map.current(GamepadID::Id_0), self.input.gamepad_map.prev(GamepadID::Id_0)) {
+					(Some(current), Some(prev)) => {
+						const SENSITIVITY: f32 = 4.0;
+						gamepad.buttons = current.buttons;
+						gamepad.left_trigger = current.left_trigger;
+						gamepad.right_trigger = current.right_trigger;
+
+						if Vector2::new(current.left_thumb).mag() < 0.8 {
+							gamepad.left_thumb = current.left_thumb;
+						} else {
+							let current = Vector2::new(current.left_thumb);
+							let prev = Vector2::new(prev.left_thumb);
+							let gamepad_vec = Vector2::new(gamepad.left_thumb).normalized() * current.mag();
+							let mut angle_diff = current.angle() - prev.angle();
+							if angle_diff < -PI {
+								angle_diff = - 2. * PI - angle_diff;
+							} else if angle_diff > PI {
+								angle_diff = 2. * PI - angle_diff
+							}
+							gamepad.left_thumb = gamepad_vec.rotate(angle_diff / SENSITIVITY).into_inner();
+						}
+
+						if Vector2::new(current.right_thumb).mag() < 0.8 {
+							gamepad.right_thumb = current.right_thumb;
+						} else {
+							let current = Vector2::new(current.right_thumb);
+							// println!("{:?}", current.angle());
+							let prev = Vector2::new(prev.right_thumb);
+							let gamepad_vec = Vector2::new(gamepad.right_thumb).normalized() * current.mag();
+							let mut angle_diff = current.angle() - prev.angle();
+							if angle_diff < -PI {
+								angle_diff = - 2. * PI - angle_diff;
+							} else if angle_diff > PI {
+								angle_diff = 2. * PI - angle_diff
+							}
+							if angle_diff > 1. {
+								println!("{:?}",  angle_diff);
+							}
+							gamepad.right_thumb = gamepad_vec.rotate(angle_diff / SENSITIVITY).into_inner();
+						}
+					},
+					(current, _) => self.gamepad = current.copied(),
+				}
+			}
+		}
+
+
 		let delta = self.timer.elapsed_reset();
 		self.timer.reset();
 		
 		let center = Vector2::new([self.render_context.config().width as f32 / 2., self.render_context.config().height as f32 / 2.]);
 
-		let cursor_pos = self.input.mouse_map.mouse_position();
-		let len = (cursor_pos - center).mag().min(200.);
-		let angle = (cursor_pos - center).angle();
-		// println!("{:?}", len);
+		let stick_pos = Vector2::new(self.gamepad.map(|x| x.right_thumb).unwrap_or([0., 0.]));
+		let len = stick_pos.mag().min(1.) * 200.;
+		let angle = stick_pos.angle();
 
 		self.scene.0.rings_mut()[0].position = center;
 
-		self.scene.1.rects_mut()[0].center = center + (Vector2::rotation(angle) * len) / 2. * 0.98;
+		self.scene.1.rects_mut()[0].center = center + (Vector2::rotation(-angle) * len) / 2. * 0.98;
 		self.scene.1.rects_mut()[0].size[0] = len;
-		self.scene.1.rects_mut()[0].rotation = angle;
+		self.scene.1.rects_mut()[0].rotation = -angle;
 
 		self.scene.0.update_rings(&self.render_context);
 		self.scene.1.update_rects(&self.render_context);
