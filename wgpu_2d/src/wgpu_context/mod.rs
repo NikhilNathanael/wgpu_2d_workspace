@@ -38,8 +38,8 @@ impl WGPUContext {
             format: capabilities.formats[0],
             width: size[0],
             height: size[1],
-            present_mode: wgpu::PresentMode::Immediate,
-            desired_maximum_frame_latency: 0,
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 1,
             alpha_mode: CompositeAlphaMode::Auto,
             view_formats: vec![capabilities.formats[0]],
         };

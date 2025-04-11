@@ -4,6 +4,8 @@ pub mod key_map {
     use winit::event::ElementState;
     use winit::keyboard::Key;
 
+    use crate::maybe_thread::{MaybeSend, MaybeSync};
+
     #[macro_export]
     macro_rules! key_char {
         ($name: literal) => {
@@ -12,7 +14,14 @@ pub mod key_map {
     }
 
     pub struct KeyMap {
-        callbacks: HashMap<Box<str>, Box<dyn FnMut(&Key, ElementState) + 'static + Send>>,
+		// Send and sync bounds not needed if only single threaded control is needed
+		// Cannot use MaybeSync and MaybeAsync because trait objects cannot have additional 
+		// bounds
+		#[cfg(not(feature="threading"))]
+        callbacks: HashMap<Box<str>, Box<dyn FnMut(&Key, ElementState) + 'static>>,
+		#[cfg(feature="threading")]
+        callbacks: HashMap<Box<str>, Box<dyn FnMut(&Key, ElementState) + 'static + Send + Sync>>,
+
         pressed_keys: HashSet<Key>,
     }
 
@@ -35,7 +44,7 @@ pub mod key_map {
             };
         }
 
-        pub fn register_callback<F: FnMut(&Key, ElementState) + 'static + Send>(
+        pub fn register_callback<F: FnMut(&Key, ElementState) + 'static + MaybeSend + MaybeSync>(
             &mut self,
             label: &str,
             callback: F,
@@ -71,7 +80,7 @@ pub mod key_map {
 pub mod mouse_map {
     use std::collections::{HashMap, HashSet};
 
-    use crate::math::Vector2;
+    use crate::{math::Vector2, maybe_thread::{MaybeSend, MaybeSync}};
     use winit::{
         dpi::PhysicalPosition,
         event::{ElementState, MouseButton, MouseScrollDelta},
@@ -86,13 +95,29 @@ pub mod mouse_map {
         scroll_level: Vector2<f32>,
         /// A list of currently pressed mouse buttons
         pressed_buttons: HashSet<MouseButton>,
+		
+		// Send and sync bounds not needed if only single threaded control is needed
+		// Cannot use MaybeSync and MaybeAsync because trait objects cannot have additional 
+		// bounds
         /// Callbacks which are called when a raw movement device event is recieved
-        raw_movement_callbacks: HashMap<Box<str>, Box<dyn FnMut(&(f64, f64)) + Send + 'static>>,
+		#[cfg(not(feature="threading"))]
+        raw_movement_callbacks: HashMap<Box<str>, Box<dyn FnMut(&(f64, f64)) + 'static>>,
+		#[cfg(feature="threading")]
+        raw_movement_callbacks: HashMap<Box<str>, Box<dyn FnMut(&(f64, f64)) + 'static + Send + Sync>>,
+
         /// Callbacks which are called when a raw scroll device event is recieved
-        raw_scroll_callbacks: HashMap<Box<str>, Box<dyn FnMut(&MouseScrollDelta) + Send + 'static>>,
+		#[cfg(not(feature="threading"))]
+        raw_scroll_callbacks: HashMap<Box<str>, Box<dyn FnMut(&MouseScrollDelta) + 'static>>,
+		#[cfg(feature="threading")]
+        raw_scroll_callbacks: HashMap<Box<str>, Box<dyn FnMut(&MouseScrollDelta) + 'static + Send + Sync>>,
+
         /// Callbacks which are called when a button event is recieved
+		#[cfg(not(feature="threading"))]
         button_callbacks:
-            HashMap<Box<str>, Box<dyn FnMut(&MouseButton, ElementState) + Send + 'static>>,
+            HashMap<Box<str>, Box<dyn FnMut(&MouseButton, ElementState) + 'static>>,
+		#[cfg(feature="threading")]
+        button_callbacks:
+            HashMap<Box<str>, Box<dyn FnMut(&MouseButton, ElementState) + 'static + Send + Sync>>,
     }
 
     impl MouseMap {
@@ -141,7 +166,8 @@ pub mod mouse_map {
                 .for_each(|(_, callback)| callback(&delta));
         }
 
-        pub fn register_raw_scroll_callback<F: FnMut(&MouseScrollDelta) + Send + 'static>(
+		// Sync and Send bounds are added based on whether threading is required
+        pub fn register_raw_scroll_callback<F: FnMut(&MouseScrollDelta) + 'static + MaybeSend + MaybeSync>(
             &mut self,
             label: &str,
             callback: F,
@@ -172,7 +198,8 @@ pub mod mouse_map {
             self.pressed_buttons.insert(button);
         }
 
-        pub fn register_button_callback<F: FnMut(&MouseButton, ElementState) + Send + 'static>(
+		// Sync and Send bounds are added based on whether threading is required
+        pub fn register_button_callback<F: FnMut(&MouseButton, ElementState) + 'static + MaybeSend + MaybeSync>(
             &mut self,
             label: &str,
             callback: F,
@@ -199,7 +226,8 @@ pub mod mouse_map {
                 .for_each(|(_, callback)| callback(&delta));
         }
 
-        pub fn register_raw_movement_callback<F: FnMut(&(f64, f64)) + Send + 'static>(
+		// Sync and Send bounds are added based on whether threading is required
+        pub fn register_raw_movement_callback<F: FnMut(&(f64, f64)) + 'static + MaybeSend + MaybeSync>(
             &mut self,
             label: &str,
             callback: F,

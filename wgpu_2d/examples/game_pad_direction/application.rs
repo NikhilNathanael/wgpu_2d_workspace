@@ -173,7 +173,9 @@ impl AppInner {
             self.render_context.config().height as f32 / 2.,
         ]);
 
-        let stick_pos = Vector2::new(self.gamepad.map(|x| x.right_thumb).unwrap_or([0., 0.]));
+        let stick_pos = Vector2::new(self.gamepad.map(|x| x.right_thumb).unwrap_or(
+			((self.input.mouse_map.mouse_position() - center) / 200. * Vector2::new([1., -1.])).into_inner()
+		));
         let len = stick_pos.mag().min(1.) * 200.;
         let angle = stick_pos.angle();
 
@@ -252,8 +254,8 @@ impl winit::application::ApplicationHandler for App {
                 inner.update_scene();
                 inner.renderer.render(
                     [
-                        &mut inner.scene.1 as &mut dyn Render,
-                        &mut inner.scene.0 as &mut dyn Render,
+                        &inner.scene.1 as &dyn Render,
+                        &inner.scene.0 as &dyn Render,
                     ],
                     &inner.render_context,
                     &inner.shader_manager,

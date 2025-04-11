@@ -1049,7 +1049,7 @@ mod renderer {
             });
 
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            for mut item in items {
+            for item in items {
                 item.render(&mut render_pass, &context, &shader_manager);
             }
 

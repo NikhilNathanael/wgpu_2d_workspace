@@ -1,4 +1,3 @@
-pub use my_ecs;
 pub use winit;
 
 pub mod input;
@@ -10,6 +9,10 @@ pub mod wgpu_context;
 
 #[cfg(feature = "ecs")]
 pub mod ecs;
+#[cfg(feature = "ecs")]
+pub use my_ecs;
+
+mod maybe_thread;
 
 #[cfg(test)]
 mod tests {

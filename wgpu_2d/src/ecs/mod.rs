@@ -1,13 +1,15 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use my_ecs::ecs::commands::*;
 use my_ecs::ecs::entity::*;
+use my_ecs::ecs::event::*;
 use my_ecs::ecs::plugin::*;
 use my_ecs::ecs::resource::*;
 use my_ecs::ecs::schedule::*;
 
 use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
 use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::{Window, WindowId};
@@ -108,7 +110,7 @@ impl Plugin for WindowPlugin {
 
         // Window Event reciever
         _world
-            .add_resource(WindowEvents(event_rx))
+            .add_resource(WindowEvents(Mutex::new(event_rx)))
             .add_resource(ShaderManager::new(self.shader_directory))
             .add_resource(KeyMap::new())
             .add_resource(MouseMap::new())
@@ -124,13 +126,14 @@ impl Plugin for WindowPlugin {
             .add_resource(render_context)
             .add_resource(renderer_2d);
 
-        _world.add_system(Update, handle_window_events);
+        _world.add_system(PreUpdate, handle_window_events)
+			;
     }
 }
 
 // A channel receiver is a foreign type so Resource cannot
 // be directly implemented for it
-struct WindowEvents(Receiver<(WindowId, WindowEvent)>);
+struct WindowEvents(Mutex<Receiver<(WindowId, WindowEvent)>>);
 impl Resource for WindowEvents {}
 
 // WindowClose transmitter
@@ -163,14 +166,19 @@ impl Component for RectangleRenderer {}
 
 // System that handles window events from the window thread
 fn handle_window_events(
-    window_events: Res<WindowEvents>,
+    mut window_events: ResMut<WindowEvents>,
     window: Res<WinitWindow>,
     mut key_map: ResMut<KeyMap>,
     mut mouse_map: ResMut<MouseMap>,
+	mut context: ResMut<WGPUContext>,
+	mut renderer: ResMut<Renderer2D>,
     commands: Commands,
 ) {
+	let mut new_window_size = None;
     for (_window_id, event) in window_events
         .0
+		.get_mut()
+		.unwrap()
         .try_iter()
         .filter(|(id, _)| *id == window.0.id())
     {
@@ -184,10 +192,21 @@ fn handle_window_events(
             WindowEvent::CursorMoved { position, .. } => {
                 mouse_map.handle_cursor_movement(position);
             }
+			WindowEvent::Resized(new_size) => {
+				new_window_size = Some([new_size.width, new_size.height]);
+			}
             WindowEvent::CloseRequested => {
                 commands.exit();
             }
             _ => (),
         }
     }
+
+	match new_window_size {
+		Some(new_size) => {
+			context.resize(new_size);
+			renderer.update_uniform(&*context);
+		}
+		_ => (),
+	}
 }

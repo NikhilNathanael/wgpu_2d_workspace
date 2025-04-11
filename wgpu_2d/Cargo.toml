@@ -18,5 +18,6 @@ rand = "0.9.0"
 simple_logger = "5.0.0"
 
 [features]
-default = ["ecs"]
+default = ["threading"]
 ecs = ["dep:my_ecs"]
+threading = ["ecs", "my_ecs/rayon"]
