@@ -105,9 +105,9 @@ mod point {
 
 	pub fn create_circle_point_list (num_points: usize, radius: f32, center_position: Vector2<f32>) -> Vec<Point> {
 		(0..num_points).map(|i| {
-			let angle = i as f32 * 2. * std::f32::consts::PI / num_points as f32;
+			let angle: f32 = i as f32 * 2. * std::f32::consts::PI / num_points as f32;
 			Point{
-				position: Vector2::rotation(angle) * Vector2::new([radius, radius]) + center_position,
+				position: Vector2::<f32>::rotation(angle) * Vector2::new([radius, radius]) + center_position,
 				// position: [angle.cos() * radius + center_position[0], angle.sin() * radius + center_position[1]],
 				color: Vector4::new([1., 1., 1., 1.]),
 			}
@@ -864,8 +864,8 @@ macro_rules! vertex_buffer_layout {
 	}
 }
 
-pub use scene_manager::*;
-mod scene_manager {
+pub use renderer::*;
+mod renderer {
 	use super::*;
 	use crate::wgpu_context::{WGPUContext, BufferAndData};
 	use crate::shader_manager::ShaderManager;
@@ -920,50 +920,6 @@ mod scene_manager {
 				uniform_bind_group_layout,
 			}
 		}
-
-		// pub fn render_all(&mut self, context: &WGPUContext, shader_manager: &ShaderManager) {
-		// 	// log::trace!("Frame Delta: {}", self.timer.elapsed_reset());
-		// 	// self.timer.reset();
-
-		// 	let surface_texture = context.surface().get_current_texture()
-		// 		.expect("Could not get current texture");
-
-		// 	let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor{
-		// 		label: Some("Render Texture"),
-		// 		format: Some(surface_texture.texture.format()),
-		// 		dimension: Some(TextureViewDimension::D2),
-		// 		usage: Some(TextureUsages::RENDER_ATTACHMENT),
-		// 		aspect: TextureAspect::All,
-		// 		base_mip_level: 0,
-		// 		mip_level_count: None,
-		// 		base_array_layer: 0,
-		// 		array_layer_count: None,
-		// 	});
-
-		// 	let mut encoder = context.get_encoder();
-		// 	let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor{
-		// 		label: None,
-		// 		color_attachments: &[
-		// 			Some(RenderPassColorAttachment{
-		// 				view: &texture_view,
-		// 				resolve_target: None,
-		// 				ops: Operations {
-		// 					load: LoadOp::Clear(Color{r: 0.05, g: 0.05, b: 0.05, a: 1.0}),
-		// 					store: StoreOp::Store,
-		// 				}
-		// 			})
-		// 		],
-		// 		..Default::default()
-		// 	});
-
-		// 	render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-		// 	self.scene.1.render(&mut render_pass, &context, &shader_manager);
-		// 	self.scene.0.render(&mut render_pass, &context, &shader_manager);
-
-		// 	std::mem::drop(render_pass);
-		// 	context.queue().submit([encoder.finish()]);
-		// 	surface_texture.present();
-		// }
 
 		pub fn render<I>(&mut self, items: I, context: &WGPUContext, shader_manager: &ShaderManager) where
 			I: IntoIterator,

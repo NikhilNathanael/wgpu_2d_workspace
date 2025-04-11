@@ -1,8 +1,5 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 pub use winit;
+pub use my_ecs;
 
 pub mod input;
 pub mod rendering;
@@ -10,6 +7,9 @@ pub mod shader_manager;
 pub mod wgpu_context;
 pub mod timer;
 pub mod math;
+
+#[cfg(feature="ecs")]
+pub mod ecs;
 
 #[cfg(test)]
 mod tests {

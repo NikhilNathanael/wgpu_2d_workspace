@@ -1,6 +1,7 @@
 mod vector {
 	use bytemuck::{Pod, Zeroable};
 	use std::ops::{Deref, DerefMut};
+	use std::mem::MaybeUninit;
 
 	// Definition of Vector types
 	macro_rules! impl_def {
@@ -18,6 +19,21 @@ mod vector {
 					Self {
 						data: output,
 					}
+				}
+			}
+			impl<T> $outer_name<T> {
+				pub fn into_inner(self) -> [T;$deref_len] {
+					let mut data = MaybeUninit::new(self.data);
+					// Drop extra elements
+					let slice_ptr = std::ptr::slice_from_raw_parts_mut(
+						// SAFETY: Slice only includes elements from array
+						unsafe{data.as_mut_ptr().cast::<T>().add($deref_len)},
+						$actual_len - $deref_len
+					);
+					// SAFETY: All elements in slice are still valid
+					unsafe{std::ptr::drop_in_place(slice_ptr)}
+					// SAFETY: Elements of array upto $deref_len are still valid
+					unsafe{data.as_ptr().cast::<[T;$deref_len]>().read()}
 				}
 			}
 
@@ -54,7 +70,7 @@ mod vector {
 	macro_rules! impl_math {
 		($vector_ty: ty, $inner_ty: ty, $($normal_indeces: literal),* $(; $($default_indeces: literal),*)?) => {
 			impl $vector_ty {
-				pub fn dot (&self, other: Self) -> $inner_ty {
+				pub fn dot (&self, other: &Self) -> $inner_ty {
 					strip_plus!($(+ self.data[$normal_indeces] * other.data[$normal_indeces])+)
 				}
 			}
@@ -557,6 +573,15 @@ mod vector {
 				]
 			}
 		}
+
+		pub fn rotate(&self, angle: f32) -> Self {
+			Self {
+				data: [
+					self.data[0] * angle.cos() - self.data[1] * angle.sin(),
+					self.data[0] * angle.sin() + self.data[1] * angle.cos(),
+				]
+			}
+		}
 	}
 
 	// Magnitude is only supported for float vectors
@@ -567,6 +592,10 @@ mod vector {
 					(
 						strip_plus!($(+ self.data[$index].powi(2))+)
 					).sqrt()
+				}
+
+				pub fn normalized(&self) -> Self {
+					self / self.mag()
 				}
 			}
 		}
