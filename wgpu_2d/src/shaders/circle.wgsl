@@ -12,7 +12,6 @@ struct V2F {
 	@location(1) uv: vec2<f32>,
 }
 
-
 // Vertex Shader outputs a quad along with the UV coordinates
 @vertex 
 fn v_main (circle: Circle, @builtin(vertex_index) v_id: u32) -> V2F {

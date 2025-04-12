@@ -70,14 +70,12 @@ impl ApplicationHandler for WinitApp {
 
 pub struct WindowPlugin {
     title: &'static str,
-    shader_directory: &'static str,
 }
 
 impl WindowPlugin {
-    pub fn new(title: &'static str, shader_directory: &'static str) -> Self {
+    pub fn new(title: &'static str) -> Self {
         Self {
             title,
-            shader_directory,
         }
     }
 }
@@ -110,7 +108,6 @@ impl Plugin for WindowPlugin {
         _world
 			// Window Event reciever
             .add_resource(WindowEvents(Mutex::new(event_rx)))
-            .add_resource(ShaderManager::new(self.shader_directory))
             .add_resource(KeyMap::new())
             .add_resource(MouseMap::new())
             .add_resource(GamepadMap::new())

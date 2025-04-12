@@ -7,52 +7,60 @@ use std::collections::hash_map::Entry;
 use std::num::NonZeroU32;
 use std::sync::Mutex;
 
-// Manages loading and compilation of shaders from disk
-//
-// Uses unsafe code to allow taking shared references into the data while
-// mutating the HashMaps. This use of unsafe has been thought through but
-// it has not been fully verified. Specific safety comments can be found
-// at the site of the unsafe blocks
-//
-// Shared references to the shader modules and render pipelines can be obtained
-// with the same lifetime as the shared reference to self instead of to the MutexGuard.
-// This should be okay as long as
-// 	a) The actual heap allocation of the box is never moved or modified
-// 	b) The hashmap never removes or replaces a shader module or render pipeline through
-// 	   a shared reference
-//
-// Mutable references are allowed to modify the data in any way they want. This is used to
-// clear the data to allow for hot-reloading
-//
-// Unanswered questions about safety
-// 	- The code below creates mutable references to the box (&mut Box<T>). Care is taken to
-// 	  avoid a shared reference to the actual box (i.e. &Box<T>) as that would immediately be UB.
-// 	  However, the returned reference (&'a T) is derived from such a shared reference. It is
-// 	  unclear if this is also UB
-//
-// 	- A simplified version of the shader manager which requires no OS code (file opening)
-// 	was tested with miri in the test module below. It detected no UB in the current configuration
-// 		- A sanity check was performed by returning a static refernce from get_module and it
-// 		  correctly identified the UB
-//  - This seems to suggest that this use of unsafe is indeed sound, but further research is needed
-//
+/// Manages loading and compilation of shaders from disk
+///
+/// Uses unsafe code to allow taking shared references into the data while
+/// mutating the HashMaps. This use of unsafe has been thought through but
+/// it has not been fully verified. Specific safety comments can be found
+/// at the site of the unsafe blocks
+///
+/// Shared references to the shader modules and render pipelines can be obtained
+/// with the same lifetime as the shared reference to self instead of to the MutexGuard.
+/// This should be okay as long as
+/// 	a) The actual heap allocation of the box is never moved or modified
+/// 	b) The hashmap never removes or replaces a shader module or render pipeline through
+/// 	   a shared reference
+///
+/// Mutable references are allowed to modify the data in any way they want. This is used to
+/// clear the data to allow for hot-reloading
+///
+/// Unanswered questions about safety
+///	- The code below creates mutable references to the box (`&mut Box<T>`). Care is taken to
+///   avoid a shared reference to the actual box (i.e. `&Box<T>`) as that would immediately be UB.
+///	  However, the returned reference (`&'a T`) is derived from such a shared reference. It is
+/// 	  unclear if this is also UB
+///
+///	- A simplified version of the shader manager which requires no OS code (file opening)
+///	  was tested with miri in the test module below. It detected no UB in the current configuration
+///		- A sanity check was performed by returning a static refernce from get_module and it
+/// 		  correctly identified the UB
+/// - This seems to suggest that this use of unsafe is indeed sound, but further research is needed
+///
 
-// Note: The shader manager uses 'static strs as the keys to the maps currently,
-// In all examples so far, a hardcoded string has been sufficient to specify the
-// shader, so there is no overhead.
-// However, if shader paths need to be determined at runtime, the only way to use
-// this structure is by leaking a string (with String::leak or Box::leak).
-// It can be changed to use a Box<str> as the key in that case
-
-enum Include<'a> {
-    Absolute(&'a str),
-    // Relative(&'a str),
-}
+/// # TODO: 
+/// - Change Mutexes in the fields to RwLock and upgrade Reader Locks to Writer Locks 
+/// when needed
+/// - add support for shaders stored in the binary itself. 
+/// 	- Added with add_literal
+/// 	- includes are not resolved here
+/// 	- have an associated path 
+/// 	- any resolve operation checks these shaders and the filesystem
+/// 		- conflicts result in panic
 
 pub struct ShaderManager {
+	/// Directory to search for dynamic shaders
     directory_path: Box<str>,
+	/// Complete Shader source associated with each path
+	///
+	/// Paths resolved in #include pre-processor directives are also included here
     shader_source: Mutex<HashMap<Box<str>, (String, Vec<Box<str>>)>>,
+	/// Cached [ShaderModule]s
+	///
+	/// [ShaderModule]s are returned from here if available
     shader_modules: Mutex<HashMap<Box<str>, Box<ShaderModule>>>,
+	/// Cached [RenderPipeline]s 
+	///
+	/// [RenderPipeline]s are returned from here if available
     render_pipelines: Mutex<
         HashMap<
             Box<str>,
@@ -64,7 +72,13 @@ pub struct ShaderManager {
     >,
 }
 
+enum Include<'a> {
+    Absolute(&'a str),
+    // Relative(&'a str),
+}
+
 impl ShaderManager {
+	/// Creates a new [ShaderManager]
     pub fn new(directory_path: &str) -> Self {
         Self {
             directory_path: directory_path.into(),
@@ -148,9 +162,17 @@ impl ShaderManager {
         }
     }
 
+	/// Returns the preprocessed string representing a complete shader source if it 
+	/// was already obtained or creates it new
     fn get_source<'a>(&'a self, path: &str) -> &'a str {
         match self.shader_source.lock().unwrap().get(path) {
             None => (),
+            // SAFETY: The only thing that can invalidate the lifetime of the returned reference
+            // is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+            //
+            // The returned reference's lifetime is tied to the shared borrow of self and we do not
+            // allow any operations with a shared reference to self to drop or remove an element
+            // from the map
             Some((source, _)) => return unsafe { &*(&**source as *const str) },
         }
         log::debug!("source file not already loaded: {:?}", path);
@@ -175,6 +197,7 @@ impl ShaderManager {
         }
     }
 
+	/// Calls [Self::get_source] and creates a [ShaderModule] from the returned source
     fn read_and_get_module(&self, path: &str, context: &WGPUContext) -> ShaderModule {
         let file = Cow::Borrowed(self.get_source(path));
         context
@@ -185,6 +208,8 @@ impl ShaderManager {
             })
     }
 
+	/// Internal API for resolving a [ShaderModule] or returning an existing
+	/// [ShaderModule]
     fn get_module<'a>(&'a self, path: &str, context: &WGPUContext) -> &'a ShaderModule {
         // SAFETY: The only thing that can invalidate the lifetime of the returned reference
         // is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
@@ -204,6 +229,8 @@ impl ShaderManager {
         }
     }
 
+	/// Called the first time a [RenderPipeline] with a specific label is requested after 
+	/// a reload. 
     fn compile_pipeline(
         &self,
         template: &RenderPipelineDescriptorTemplate,
@@ -219,6 +246,10 @@ impl ShaderManager {
         context.device().create_render_pipeline(&descriptor)
     }
 
+	/// Returns an already compiled pipeline with the [RenderPipelineDescriptor] template 
+	/// registered with the given label.
+	///
+	/// If such a pipeline does not exist yet, compile one using the given template
     pub fn get_render_pipeline<'a>(
         &'a self,
         label: &str,
@@ -249,6 +280,8 @@ impl ShaderManager {
         }
     }
 
+	/// Registers a specific [RenderPipelineDescriptorTemplate] with a label.
+	/// Not reset when reload is called
     pub fn register_render_pipeline(
         &self,
         label: &str,
@@ -268,9 +301,11 @@ impl ShaderManager {
         }
     }
 
+	/// Remove all resolved shaders and pipelines
     pub fn reload(&mut self) {
         // These mutable operations are fine because we have mutable access to self
         // so there are no borrows of this data
+		// TODO: Change these locks to get_mut
         self.shader_source.lock().unwrap().clear();
         self.shader_modules.lock().unwrap().clear();
         self.render_pipelines
@@ -281,20 +316,35 @@ impl ShaderManager {
     }
 }
 
+/// A template that can be used to instantiate a [`RenderPipelineDescriptor`]
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderPipelineDescriptorTemplate {
+	/// Corresponds to [`RenderPipelineDescriptor::label`]
     pub label: Label<'static>,
+	/// Corresponds to [`RenderPipelineDescriptor::layout`]
     pub layout: Option<PipelineLayout>,
+	/// Template version of [`RenderPipelineDescriptor::vertex`] 
     pub vertex: VertexStateTemplate,
+	/// Corresponds to [`RenderPipelineDescriptor::primitive`]
     pub primitive: PrimitiveState,
+	/// Corresponds to [`RenderPipelineDescriptor::depth_stencil`]
     pub depth_stencil: Option<DepthStencilState>,
+	/// Corresponds to [`RenderPipelineDescriptor::multisample`]
     pub multisample: MultisampleState,
+	/// Template version of [`RenderPipelineDescriptor::fragment`]
     pub fragment: Option<FragmentStateTemplate>,
+	/// Corresponds to [`RenderPipelineDescriptor::multiview`]
     pub multiview: Option<NonZeroU32>,
+	/// Corresponds to [`RenderPipelineDescriptor::cache`]
     pub cache: Option<&'static PipelineCache>,
 }
 
 impl RenderPipelineDescriptorTemplate {
+	/// Creates a [RenderPipelineDescriptor] to use during shader compilation
+	///
+	/// Calls [VertexStateTemplate::resolve] with v_module and 
+	/// [FragmentStateTemplate::resolve] with f_module to get 
+	/// a [VertexState] and [FragmentState]
     fn resolve<'a>(
         &'a self,
         v_module: &'a ShaderModule,
@@ -313,6 +363,11 @@ impl RenderPipelineDescriptorTemplate {
         }
     }
 
+	/// Calls [VertexStateTemplate::get_module_path] and [FragmentStateTemplate::get_module_path] 
+	/// and returns them as a tuple 
+	///
+	/// The Fragment path is in an [Option] because [FragmentState] is 
+	/// optional in [RenderPipelineDescriptor]
     fn get_module_paths(&self) -> (&'static str, Option<&'static str>) {
         (
             self.vertex.get_module_path(),
@@ -321,15 +376,28 @@ impl RenderPipelineDescriptorTemplate {
     }
 }
 
+/// A template that can be used to instantiate a [VertexState]
+///
+/// This does not support overridable constants so [VertexState::compilation_options] does 
+/// not have an equivalent here
 #[derive(Debug, Clone, PartialEq)]
 pub struct VertexStateTemplate {
+	/// The path of the shader file relative to the shader source of the [ShaderManager] this gets passed to
+	/// 
+	/// This is the difference between [VertexStateTemplate] and [VertexState]
     pub module_path: &'static str,
+	/// Corresponds to [VertexState::entry_point]
     pub entry_point: Option<&'static str>,
-    // We do not support overridable constants here
+	/// Corresponds to [VertexState::buffers]
     pub buffers: &'static [VertexBufferLayout<'static>],
 }
 
 impl VertexStateTemplate {
+	/// Creates a [FragmentState] to use during shader compilation
+	/// 
+	/// The template module path is replaced with the module parameter.
+	///
+	/// The caller is responsible for ensuring the correct module is passed
     fn resolve<'a>(&self, module: &'a ShaderModule) -> VertexState<'a> {
         VertexState {
             module,
@@ -340,20 +408,34 @@ impl VertexStateTemplate {
         }
     }
 
+	/// Getter for [Self::module_path]
     fn get_module_path(&self) -> &'static str {
         self.module_path
     }
 }
 
+/// A template that can be used to instantiate a [FragmentState]
+///
+/// This does not support overridable constants so [FragmentState::compilation_options] does 
+/// not have an equivalent here
 #[derive(Debug, Clone, PartialEq)]
 pub struct FragmentStateTemplate {
+	/// The path of the shader file relative to the shader source of the [ShaderManager] this gets passed to
+	/// 
+	/// This is the difference between [FragmentStateTemplate] and [FragmentState]
     pub module_path: &'static str,
+	/// Corresponds to [FragmentState::entry_point]
     pub entry_point: Option<&'static str>,
-    // We do not support overridable constants here
+	/// Corresponds to [FragmentState::targets]
     pub targets: Box<[Option<ColorTargetState>]>,
 }
 
 impl FragmentStateTemplate {
+	/// Creates a [FragmentState] to use during shader compilation
+	///
+	/// The template module path is replaced with the module parameter.
+	///
+	/// The caller is responsible for ensuring the correct module is passed
     fn resolve<'a>(&'a self, module: &'a ShaderModule) -> FragmentState<'a> {
         FragmentState {
             module,
@@ -364,6 +446,7 @@ impl FragmentStateTemplate {
         }
     }
 
+	/// Getter for [Self::module_path]
     fn get_module_path(&self) -> &'static str {
         self.module_path
     }

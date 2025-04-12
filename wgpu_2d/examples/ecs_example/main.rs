@@ -20,7 +20,8 @@ use winit::keyboard::{Key, NamedKey};
 pub fn main() {
     let mut world = World::new();
     world
-        .add_plugin(WindowPlugin::new("Test App", SHADER_DIRECTORY))
+		.add_resource(ShaderManager::new(SHADER_DIRECTORY))
+        .add_plugin(WindowPlugin::new("Test App"))
         .add_system(Startup, (spawn_character, set_window_type))
 		.add_system(PreUpdate, reset_timer)
         .add_system(Update, (control_character, check_exit, control_position))

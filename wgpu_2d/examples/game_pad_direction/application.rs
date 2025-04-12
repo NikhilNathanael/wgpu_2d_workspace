@@ -245,6 +245,7 @@ impl winit::application::ApplicationHandler for App {
                 inner
                     .render_context
                     .resize([new_size.width, new_size.height]);
+				*inner.renderer.get_uniform().screen_size = [new_size.width as f32, new_size.height as f32];
                 inner.renderer.update_uniform(&inner.render_context);
                 inner.window.request_redraw();
             }

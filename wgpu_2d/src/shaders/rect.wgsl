@@ -9,7 +9,6 @@ struct Rect {
 struct V2F {
 	@builtin(position) position: vec4<f32>,
 	@location(0) color: vec4<f32>,
-	@location(1) pos: vec4<f32>,
 }
 
 @vertex 
@@ -25,13 +24,11 @@ fn v_main (rect: Rect, @builtin(vertex_index) v_id: u32) -> V2F {
 	var output: V2F;
 	output.color = rect.color;
 	output.position = vec4<f32>(clip_space, 0., 1.);
-	output.pos = vec4<f32>(clip_space, 0., 1.);
 	/* output.position = vec4<f32>(0., 0., 0., 1.); */
 	return output;
 }
 
 @fragment
 fn f_main(v2f: V2F) -> @location(0) vec4<f32> {
-	return v2f.pos;
-	/* return vec4<f32>(0.5); */
+	return v2f.color;
 }
