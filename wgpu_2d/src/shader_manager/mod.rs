@@ -5,9 +5,8 @@ use std::io::ErrorKind;
 use wgpu::*;
 
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::num::NonZeroU32;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 /// Manages loading and compilation of shaders from disk
 ///
@@ -40,16 +39,7 @@ use std::sync::Mutex;
 ///
 
 /// # TODO: 
-/// - Change Mutexes in the fields to RwLock and upgrade Reader Locks to Writer Locks 
-/// when needed
 /// - Change all these panics to return a result instead
-/// - Replace all manual uses of unsafe to use the new unsafe extend_lifetime function instead
-/// - add support for shaders stored in the binary itself. 
-/// 	- Added with add_literal
-/// 	- includes are not resolved here
-/// 	- have an associated path 
-/// 	- any resolve operation checks these shaders and the filesystem
-/// 		- conflicts result in panic
 
 pub struct ShaderManager {
 	/// Directory to search for dynamic shaders
@@ -64,7 +54,7 @@ pub struct ShaderManager {
 	/// [Self::constant_source_files]
 	///
 	/// These are removed by [Self::reload] 
-    source_files: Mutex<HashMap<Box<str>, Box<str>>>,
+    source_files: RwLock<HashMap<Box<str>, Box<str>>>,
 	/// Stores Shader source files that are not stored on the disk
 	/// but are stored within the final binary
 	///
@@ -76,15 +66,15 @@ pub struct ShaderManager {
 	/// [Self::source_files]
 	///
 	/// These are not removed when [Self::reload] is called
-	constant_source_files: Mutex<HashMap<Box<str>, Box<str>>>,
+	constant_source_files: RwLock<HashMap<Box<str>, Box<str>>>,
 	/// Cached [ShaderModule]s
 	///
 	/// [ShaderModule]s are returned from here if available
-    shader_modules: Mutex<HashMap<Box<str>, Box<ShaderModule>>>,
+    shader_modules: RwLock<HashMap<Box<str>, Box<ShaderModule>>>,
 	/// Cached [RenderPipeline]s 
 	///
 	/// [RenderPipeline]s are returned from here if available
-    render_pipelines: Mutex<
+    render_pipelines: RwLock<
         HashMap<
             Box<str>,
             (
@@ -100,10 +90,10 @@ impl ShaderManager {
     pub fn new(directory_path: &str) -> Self {
         Self {
             directory_path: directory_path.into(),
-            source_files: Mutex::new(HashMap::new()),
-			constant_source_files: Mutex::new(HashMap::new()),
-            shader_modules: Mutex::new(HashMap::new()),
-            render_pipelines: Mutex::new(HashMap::new()),
+            source_files: RwLock::new(HashMap::new()),
+			constant_source_files: RwLock::new(HashMap::new()),
+            shader_modules: RwLock::new(HashMap::new()),
+            render_pipelines: RwLock::new(HashMap::new()),
         }
     }
 
@@ -111,17 +101,27 @@ impl ShaderManager {
 	/// or tries to read it from disk and if found, caches and returns it
 	///
 	fn get_file_from_disk<'a>(&'a self, path: &str) -> Option<&'a str> {
-		let mut lock = self.source_files.lock().unwrap();
-		match lock.get(path) {
-			// SAFETY: See extend_lifetime
+		match self.source_files.read().unwrap().get(path) {
+			// SAFETY: The only thing that can invalidate the lifetime of the returned reference
+			// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+			//
+			// The returned reference's lifetime is tied to the shared borrow of self and we do not
+			// allow any operations with a shared reference to self to drop or remove any element
+			// from the map
 			Some(file) => return Some(unsafe{extend_lifetime(&**file)}),
 			None => (),
 		}
 		match read_to_string(self.directory_path.to_string() + &*path) {
 			Ok(file) => {
-				let file = lock.entry(path.into()).or_insert(file.into());
-				// SAFETY: See extend_lifetime
-				Some(unsafe{extend_lifetime(&**file)})
+				// SAFETY: The only thing that can invalidate the lifetime of the returned reference
+				// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+				//
+				// The returned reference's lifetime is tied to the shared borrow of self and we do not
+				// allow any operations with a shared reference to self to drop or remove any element
+				// from the map 
+				//
+				// This insert uses entry.or_insert which does not insert an element if it already exists
+				Some(unsafe{extend_lifetime(self.source_files.write().unwrap().entry(path.into()).or_insert(file.into()))})
 			}
 			Err(err) if err.kind() == ErrorKind::NotFound => {
 				None
@@ -134,9 +134,13 @@ impl ShaderManager {
 
 	/// Searches [Self::constant_source_files] for the given path and returns it if present
 	fn get_file_from_constant_source<'a>(&'a self, path: &str) -> Option<&'a str> {
-		let lock = self.constant_source_files.lock().unwrap();
-		match lock.get(path) {
-			// SAFETY: See extend_lifetime
+		match self.constant_source_files.read().unwrap().get(path) {
+			// SAFETY: The only thing that can invalidate the lifetime of the returned reference
+			// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+			//
+			// The returned reference's lifetime is tied to the shared borrow of self and we do not
+			// allow any operations with a shared reference to self to drop or remove any element
+			// from the map
 			Some(file) => return Some(unsafe{extend_lifetime(&**file)}),
 			None => None,
 		}
@@ -257,7 +261,7 @@ impl ShaderManager {
 		// Go line by line and find the first line that contains an include directive
 		// if its present
 		fn find_next_include(input: &str) -> Option<(&str, &str)> {
-			input.lines().enumerate().filter_map(|(i, line)| {
+			input.lines().filter_map(|line| {
 				let path_container = line.trim().split_once("#include")?.1.trim();
 				(|| {
 					Some((line, path_container.split_once('<')?.1.rsplit_once('>')?.0))
@@ -289,16 +293,23 @@ impl ShaderManager {
         // The returned reference's lifetime is tied to the shared borrow of self and we do not
         // allow any operations with a shared reference to self to drop or remove any element
         // from the map
-        unsafe {
-            &*(&**self.shader_modules.lock().unwrap()
+		match self.shader_modules.read().unwrap().get(path) {
+			Some(value) => return unsafe{extend_lifetime(value)},
+			None => (),
+		}
+        // SAFETY: The only thing that can invalidate the lifetime of the returned reference
+        // is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+        //
+        // The returned reference's lifetime is tied to the shared borrow of self and we do not
+        // allow any operations with a shared reference to self to drop or remove any element
+        // from the map
+		//
+		// This insert uses entry.or_insert which does not insert an element if it already exists
+		unsafe {
+			extend_lifetime(&**self.shader_modules.write().unwrap()
 			.entry(path.into())
-			// putting a new module into the map could invalidate old references 
-			// but we ensure that this is never done to an existing module
-			.or_insert(Box::new(self.read_and_get_module(path, context)))
-
-			// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
-			as *const ShaderModule)
-        }
+			.or_insert(Box::new(self.read_and_get_module(path, context))))
+		}
     }
 
 	/// Called the first time a [RenderPipeline] with a specific label is requested after 
@@ -331,32 +342,36 @@ impl ShaderManager {
         label: &str,
         context: &WGPUContext,
     ) -> &'a RenderPipeline {
-        match self
-            .render_pipelines
-            .lock()
-            .unwrap()
-            .get_mut(label)
-			// TODO: Change this expect to a pattern match inside the match block with 
-			// a proper error message
-            .expect("Tried to access a render pipeline that wasn't registered")
-        {
-            // SAFETY: The only thing that can invalidate the lifetime of the returned reference
-            // is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
-            //
-            // The returned reference's lifetime is tied to the shared borrow of self and we do not
-            // allow any operations with a shared reference to self to drop or remove an element
-            // from the map
-            (template, x) => unsafe {
-                &*(
-                    // putting a new pipeline into the map could invalidate old references,
-                    // but we ensure that this is only done if there wasn't already a pipeline there
-                    &**x.get_or_insert_with(
-						// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
-                        || Box::new(self.compile_pipeline(template, context)), 
-                    ) as *const RenderPipeline
-                )
-            },
-        }
+
+		match self.render_pipelines.read().unwrap().get(label) {
+			// SAFETY: The only thing that can invalidate the lifetime of the returned reference
+			// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+			//
+			// The returned reference's lifetime is tied to the shared borrow of self and we do not
+			// allow any operations with a shared reference to self to drop or remove any element
+			// from the map
+			Some((_, Some(pipeline))) => return unsafe{extend_lifetime(pipeline)},
+			Some((_, None)) => (),
+			None => {
+				panic!("Attempted to obtain render pipeline with label that wasn't registered: {}", label);
+			}
+		}
+
+		match self.render_pipelines.write().unwrap().get_mut(label).unwrap() {
+			(template, x) => {
+				// SAFETY: The only thing that can invalidate the lifetime of the returned reference
+				// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
+				//
+				// The returned reference's lifetime is tied to the shared borrow of self and we do not
+				// allow any operations with a shared reference to self to drop or remove any element
+				// from the map
+				//
+				// This insert uses Option.get_or_insert_with which does not insert an element if it already exists
+				unsafe{extend_lifetime(
+					x.get_or_insert_with(|| Box::new(self.compile_pipeline(template, context)))
+				)}
+			}
+		}
     }
 
 	/// Registers a specific [RenderPipelineDescriptorTemplate] with a label.
@@ -366,19 +381,17 @@ impl ShaderManager {
         label: &str,
         template: RenderPipelineDescriptorTemplate,
     ) {
-		// TODO: Change this to only allocate the label if insertion is necessary
-        match self.render_pipelines.lock().unwrap().entry(label.into()) {
-            // we only have shared access to self here so there may be borrows into
-            // any existing pipeline here.
-            // we must take care not to remove any existing render pipelines
-            Entry::Occupied(_) => (),
-
-            // this insertion is fine because there is not render pipeline to
-            // invalidate here
-            Entry::Vacant(x) => {
-                x.insert((template, None));
-            }
-        }
+		match self.render_pipelines.read().unwrap().get(label) {
+			Some(_) => return,
+			None => (),
+		}
+		// we only have shared access to self here so there may be borrows into
+		// any existing pipeline here.
+		// we must take care not to remove any existing render pipelines
+		//
+		// entry.or_insert ensures any existign render pipelines are left alone
+        self.render_pipelines.write().unwrap().entry(label.into())
+			.or_insert((template, None));
     }
 	
 	/// Registers a new constant shader source file. This is intended for source 
@@ -395,7 +408,7 @@ impl ShaderManager {
 	/// Should this return a result to indicate an error instead of panicking
 	pub fn register_constant_source(&self, path: &str, source: Box<str>) {
 		let mut lock = self.constant_source_files
-			.lock().unwrap();
+			.write().unwrap();
 		match lock.get(path) {
 			Some(old_source) if *old_source == source => (),
 			Some(old_source) => {
@@ -414,10 +427,10 @@ impl ShaderManager {
         // These mutable operations are fine because we have mutable access to self
         // so there are no borrows of this data
 		// TODO: Change these locks to get_mut
-        self.source_files.lock().unwrap().clear();
-        self.shader_modules.lock().unwrap().clear();
+        self.source_files.get_mut().unwrap().clear();
+        self.shader_modules.get_mut().unwrap().clear();
         self.render_pipelines
-            .lock()
+            .get_mut()
             .unwrap()
             .iter_mut()
             .for_each(|(_, (_, x))| *x = None);
