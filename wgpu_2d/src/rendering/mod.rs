@@ -380,8 +380,11 @@ mod circle {
     use crate::shader_manager::*;
     use crate::vertex_buffer_layout;
     use crate::wgpu_context::{BufferAndData, WGPUContext};
+	use crate::math::{Vector2, Vector4};
+
     use derive::VertexBufferData;
     use wgpu::*;
+
 
     use super::Render;
 
@@ -390,8 +393,8 @@ mod circle {
     #[derive(Pod, Zeroable, Clone, Copy, VertexBufferData)]
     #[repr(C)]
     pub struct Circle {
-        pub color: [f32; 4],
-        pub position: [f32; 2],
+        pub color: Vector4<f32>,
+        pub position: Vector2<f32>,
         pub radius: f32,
     }
 
@@ -919,10 +922,12 @@ mod texture {
 
 use bytemuck::{Pod, Zeroable};
 use derive::UniformBufferData;
+use crate::math::Vector2;
 #[derive(Pod, Zeroable, Clone, Copy, UniformBufferData)]
 #[repr(C)]
 pub struct Uniform {
-    screen_size: [f32; 2],
+    pub screen_size: Vector2<f32>,
+	pub view_port_origin: Vector2<f32>,
 }
 
 pub use circle::*;
@@ -962,10 +967,11 @@ mod renderer {
         pub fn new(context: &WGPUContext) -> Self {
             let uniform = BufferAndData::new(
                 Uniform {
-                    screen_size: [
+                    screen_size: Vector2::new([
                         context.config().width as f32,
                         context.config().height as f32,
-                    ],
+                    ]),
+					view_port_origin: Vector2::new([0., 0.]),
                 },
                 context,
             );
@@ -1063,12 +1069,12 @@ mod renderer {
         }
 
         pub fn update_uniform(&mut self, context: &WGPUContext) {
-            self.uniform.data.screen_size = [
-                context.config().width as f32,
-                context.config().height as f32,
-            ];
             self.uniform.update_buffer(context);
         }
+
+		pub fn get_uniform(&mut self) -> &mut Uniform {
+			&mut self.uniform.data
+		}
     }
 }
 

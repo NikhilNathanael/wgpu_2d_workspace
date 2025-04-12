@@ -20,7 +20,7 @@ struct V2F {
 fn v_main (ring: Ring, @builtin(vertex_index) v_id: u32) -> V2F {
 	let pos = quad_strip[v_id] * ring.outer_radius + ring.center;
 
-	let clip_space = pos / (uni.screen_size) * 2. * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
+	let clip_space = worldspace_to_clipspace(pos);
 
 	var output: V2F;
 	output.color = ring.color;

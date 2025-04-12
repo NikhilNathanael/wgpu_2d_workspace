@@ -143,7 +143,6 @@ impl AppInner {
                             gamepad.right_thumb = current.right_thumb;
                         } else {
                             let current = Vector2::new(current.right_thumb);
-                            // println!("{:?}", current.angle());
                             let prev = Vector2::new(prev.right_thumb);
                             let gamepad_vec =
                                 Vector2::new(gamepad.right_thumb).normalized() * current.mag();

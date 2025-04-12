@@ -17,7 +17,7 @@ pub struct WGPUContext {
 impl WGPUContext {
     pub fn new(window: impl Into<SurfaceTarget<'static>>, size: [u32; 2]) -> Self {
         let instance = Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::DX12,
             flags: InstanceFlags::DEBUG | InstanceFlags::VALIDATION,
             ..Default::default()
         });
@@ -39,15 +39,18 @@ impl WGPUContext {
             width: size[0],
             height: size[1],
             present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 1,
+            desired_maximum_frame_latency: 0,
             alpha_mode: CompositeAlphaMode::Auto,
             view_formats: vec![capabilities.formats[0]],
         };
-
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("Device"),
-                required_features: Features::all_webgpu_mask() & !Features::BGRA8UNORM_STORAGE,
+                required_features: Features::all_webgpu_mask() & 
+					!Features::TEXTURE_COMPRESSION_ETC2 &
+					!Features::SHADER_F16 &
+					!Features::BGRA8UNORM_STORAGE &
+					!Features::TEXTURE_COMPRESSION_ASTC,
                 memory_hints: MemoryHints::Performance,
                 ..Default::default()
             },
@@ -59,10 +62,10 @@ impl WGPUContext {
             match error {
                 wgpu::Error::OutOfMemory { .. } => log::error!("Out of memory"),
                 wgpu::Error::Validation { description, .. } => {
-                    log::error!("Validation Error: {description}")
+                    eprintln!("Validation Error: {description}")
                 }
                 wgpu::Error::Internal { description, .. } => {
-                    log::error!("Internal Error: {description}")
+                    eprintln!("Internal Error: {description}")
                 }
             }
             std::process::exit(25);

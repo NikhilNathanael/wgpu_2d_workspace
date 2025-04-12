@@ -9,7 +9,6 @@ use my_ecs::ecs::resource::*;
 use my_ecs::ecs::schedule::*;
 
 use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
 use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::{Window, WindowId};
@@ -108,8 +107,8 @@ impl Plugin for WindowPlugin {
             _ = event_loop.run_app(&mut app);
         });
 
-        // Window Event reciever
         _world
+			// Window Event reciever
             .add_resource(WindowEvents(Mutex::new(event_rx)))
             .add_resource(ShaderManager::new(self.shader_directory))
             .add_resource(KeyMap::new())
@@ -121,24 +120,31 @@ impl Plugin for WindowPlugin {
         let (window, render_context) = window_rx.recv().unwrap();
         let renderer_2d = Renderer2D::new(&render_context);
 
+		_world
+			.register_event::<RedrawRequested>()
+			;
+
         _world
             .add_resource(WinitWindow(window))
             .add_resource(render_context)
             .add_resource(renderer_2d);
 
-        _world.add_system(PreUpdate, handle_window_events)
+        _world
+			.add_system(PreUpdate, handle_window_events)
+			.add_system(Exited, send_exit_event)
 			;
     }
 }
+
+// Event that signals that a redraw has been requested
+#[derive(Clone, Copy)]
+pub struct RedrawRequested;
+impl Event for RedrawRequested {}
 
 // A channel receiver is a foreign type so Resource cannot
 // be directly implemented for it
 struct WindowEvents(Mutex<Receiver<(WindowId, WindowEvent)>>);
 impl Resource for WindowEvents {}
-
-// WindowClose transmitter
-struct WindowClose(Sender<()>);
-impl Resource for WindowClose {}
 
 impl Resource for ShaderManager {}
 
@@ -171,8 +177,8 @@ fn handle_window_events(
     mut key_map: ResMut<KeyMap>,
     mut mouse_map: ResMut<MouseMap>,
 	mut context: ResMut<WGPUContext>,
-	mut renderer: ResMut<Renderer2D>,
     commands: Commands,
+	mut redraw_event: EventWriter<RedrawRequested>,
 ) {
 	let mut new_window_size = None;
     for (_window_id, event) in window_events
@@ -198,6 +204,9 @@ fn handle_window_events(
             WindowEvent::CloseRequested => {
                 commands.exit();
             }
+			WindowEvent::RedrawRequested => {
+				redraw_event.write(RedrawRequested);
+			}
             _ => (),
         }
     }
@@ -205,8 +214,15 @@ fn handle_window_events(
 	match new_window_size {
 		Some(new_size) => {
 			context.resize(new_size);
-			renderer.update_uniform(&*context);
 		}
 		_ => (),
 	}
+}
+
+// WindowClose transmitter
+struct WindowClose(Sender<()>);
+impl Resource for WindowClose {}
+
+fn send_exit_event(close_sender: Res<WindowClose>) {
+	close_sender.0.send(()).unwrap();
 }

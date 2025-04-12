@@ -47,7 +47,6 @@ mod vector {
                 type Target = [T; $deref_len];
                 fn deref(&self) -> &Self::Target {
                     debug_assert!($deref_len <= $actual_len);
-                    eprintln!("{:?} {:?}", $deref_len, $actual_len);
                     unsafe { &*(self.data.as_ptr().cast()) }
                 }
             }

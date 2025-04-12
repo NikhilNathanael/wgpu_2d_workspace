@@ -12,7 +12,7 @@ struct V2F {
 
 @vertex
 fn v_main(point: Point) -> V2F {
-	let clip_space = point.position / (uni.screen_size) * vec2<f32>(1., -1.) + vec2<f32>(-1., 1.);
+	let clip_space = worldspace_to_clipspace(pos);
 
 	var output: V2F;
 	output.color = point.color;
