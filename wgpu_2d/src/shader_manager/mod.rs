@@ -1,5 +1,7 @@
 use crate::wgpu_context::WGPUContext;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs::read_to_string;
+use std::io::ErrorKind;
 use wgpu::*;
 
 use std::borrow::Cow;
@@ -40,6 +42,8 @@ use std::sync::Mutex;
 /// # TODO: 
 /// - Change Mutexes in the fields to RwLock and upgrade Reader Locks to Writer Locks 
 /// when needed
+/// - Change all these panics to return a result instead
+/// - Replace all manual uses of unsafe to use the new unsafe extend_lifetime function instead
 /// - add support for shaders stored in the binary itself. 
 /// 	- Added with add_literal
 /// 	- includes are not resolved here
@@ -50,10 +54,29 @@ use std::sync::Mutex;
 pub struct ShaderManager {
 	/// Directory to search for dynamic shaders
     directory_path: Box<str>,
-	/// Complete Shader source associated with each path
+	/// File contents cached in memory keyed by relative path to file.
 	///
-	/// Paths resolved in #include pre-processor directives are also included here
-    shader_source: Mutex<HashMap<Box<str>, (String, Vec<Box<str>>)>>,
+	/// These may or may not be complete or valid shader files. 
+	/// A shader module may include multiple files before being 
+	/// compiled.
+	///
+	/// The paths here MUST be mutually exclusive to the paths in 
+	/// [Self::constant_source_files]
+	///
+	/// These are removed by [Self::reload] 
+    source_files: Mutex<HashMap<Box<str>, Box<str>>>,
+	/// Stores Shader source files that are not stored on the disk
+	/// but are stored within the final binary
+	///
+	/// These may or may not be complete or valid shader files. 
+	/// A shader module may include multiple files before being 
+	/// compiled.
+	///
+	/// The paths here MUST be mutually exclusive to the paths in 
+	/// [Self::source_files]
+	///
+	/// These are not removed when [Self::reload] is called
+	constant_source_files: Mutex<HashMap<Box<str>, Box<str>>>,
 	/// Cached [ShaderModule]s
 	///
 	/// [ShaderModule]s are returned from here if available
@@ -72,134 +95,183 @@ pub struct ShaderManager {
     >,
 }
 
-enum Include<'a> {
-    Absolute(&'a str),
-    // Relative(&'a str),
-}
-
 impl ShaderManager {
 	/// Creates a new [ShaderManager]
     pub fn new(directory_path: &str) -> Self {
         Self {
             directory_path: directory_path.into(),
-            shader_source: Mutex::new(HashMap::new()),
+            source_files: Mutex::new(HashMap::new()),
+			constant_source_files: Mutex::new(HashMap::new()),
             shader_modules: Mutex::new(HashMap::new()),
             render_pipelines: Mutex::new(HashMap::new()),
         }
     }
 
-    fn resolve_source(&self, path: &str) -> (String, Vec<Box<str>>) {
-        log::trace!("resolving source for file: {:?}", path);
-        use std::io::BufRead;
-        // Open file
-        let mut file = std::io::BufReader::new(
-            std::fs::File::open(self.directory_path.to_string() + path)
-                .expect("Could not open file"),
-        );
-        let mut includes = Vec::new();
-        let mut source = String::new();
+	/// Searches [Self::source_files] for the given path and returns it if present
+	/// or tries to read it from disk and if found, caches and returns it
+	///
+	fn get_file_from_disk<'a>(&'a self, path: &str) -> Option<&'a str> {
+		let mut lock = self.source_files.lock().unwrap();
+		match lock.get(path) {
+			// SAFETY: See extend_lifetime
+			Some(file) => return Some(unsafe{extend_lifetime(&**file)}),
+			None => (),
+		}
+		match read_to_string(self.directory_path.to_string() + &*path) {
+			Ok(file) => {
+				let file = lock.entry(path.into()).or_insert(file.into());
+				// SAFETY: See extend_lifetime
+				Some(unsafe{extend_lifetime(&**file)})
+			}
+			Err(err) if err.kind() == ErrorKind::NotFound => {
+				None
+			}
+			Err(err) => {
+				panic!("Error while attempting to read file with path {} {err:?}", path);
+			}
+		}
+	}
 
-        let mut line = String::new();
+	/// Searches [Self::constant_source_files] for the given path and returns it if present
+	fn get_file_from_constant_source<'a>(&'a self, path: &str) -> Option<&'a str> {
+		let lock = self.constant_source_files.lock().unwrap();
+		match lock.get(path) {
+			// SAFETY: See extend_lifetime
+			Some(file) => return Some(unsafe{extend_lifetime(&**file)}),
+			None => None,
+		}
+	}
 
-        while let Ok(x) = file.read_line(&mut line) {
-            // read_line returns Ok(0) after EOF
-            if x == 0 {
-                break;
-            }
-            match get_include_path(&*line) {
-                None => source.push_str(&line),
-                Some(Include::Absolute(path)) => {
-                    let include_source = self.get_source(path);
-                    let include_includes = self.get_includes(path);
-                    includes.extend_from_slice(include_includes);
-                    source.push_str(include_source);
-                }
-            }
-            line.clear();
-        }
-        log::trace!("finished resolving source for file: {:?}", path);
-        return (source, includes);
-
-        // Turns a line like
-        // | #include <<path/to/file>> into `Some(Include::Absolute("path/to/file"))`
-        fn get_include_path(line: &str) -> Option<Include> {
-            let path_container = line.trim().split_once("#include")?.1.trim();
-            (|| {
-                Some(Include::Absolute(
-                    path_container.split_once('<')?.1.rsplit_once('>')?.0,
-                ))
-            })()
-            .or(None)
-        }
-    }
-
-    fn get_includes<'a>(&self, path: &str) -> &'a [Box<str>] {
-        match self.shader_source.lock().unwrap().get(path) {
-            None => (),
-            Some((_, includes)) => return unsafe { &*(&**includes as *const [Box<str>]) },
-        }
+	/// Gets the source file and then iteratively expands each of the include statements
+	fn get_source_new<'a>(&'a self, path: &str) -> String {
+		// At this point, we know the shader source is not cached
         log::debug!("source file not already loaded: {:?}", path);
 
-        let (source, includes) = self.resolve_source(path);
-        if includes.iter().find(|x| &***x == path).is_some() {
-            // Only works if the dependancy was already loaded,
-            // otherwise it will just overflow the stack ¯\_(ツ)_/¯
-            //
-            // It is guaranteed to crash so its not really a safety problem
-            log::error!(
-                "Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}",
-                path,
-                includes
-            );
-            panic!();
-        }
-        use std::collections::hash_map::Entry;
-        match self.shader_source.lock().unwrap().entry(path.into()) {
-            Entry::Occupied(x) => unsafe { &*(&*x.get().1 as *const [Box<str>]) },
-            Entry::Vacant(x) => unsafe {
-                &*(&*x.insert((source, includes)).1 as *const [Box<str>])
-            },
-        }
-    }
+		// Check if file has been loaded from disk or is a constant source
+		let disk_source_file = self.get_file_from_disk(path);
+		let const_source_file = self.get_file_from_constant_source(path);
 
-	/// Returns the preprocessed string representing a complete shader source if it 
-	/// was already obtained or creates it new
-    fn get_source<'a>(&'a self, path: &str) -> &'a str {
-        match self.shader_source.lock().unwrap().get(path) {
-            None => (),
-            // SAFETY: The only thing that can invalidate the lifetime of the returned reference
-            // is if the backing Box is deallocated (moving a box does not invalidate pointers into it)
-            //
-            // The returned reference's lifetime is tied to the shared borrow of self and we do not
-            // allow any operations with a shared reference to self to drop or remove an element
-            // from the map
-            Some((source, _)) => return unsafe { &*(&**source as *const str) },
-        }
-        log::debug!("source file not already loaded: {:?}", path);
+		let mut source = match (disk_source_file, const_source_file) {
+			(Some(source), None) | (None, Some(source)) => source,
+			// If both return a source file or neither return one, then panic
+			(Some(_), Some(_)) => {
+				panic!("Requested shader path {} is available on disk and in constant shaders", path);
+			}
+			(None, None) => {
+				panic!("Requested shader path {} not found on disk or in constant shaders", path);
+			}
+		}.to_string();
 
-        let (source, includes) = self.resolve_source(path);
-        if includes.iter().find(|x| &***x == path).is_some() {
-            // Only works if the dependancy was already loaded,
-            // otherwise it will just overflow the stack ¯\_(ツ)_/¯
-            //
-            // It is guaranteed to crash so its not really a safety problem
-            log::error!(
-                "Shader error: Circular Dependancy in source file {:?}\n Resolved Includes: {:?}",
-                path,
-                includes
-            );
-            panic!();
-        }
-        use std::collections::hash_map::Entry;
-        match self.shader_source.lock().unwrap().entry(path.into()) {
-            Entry::Occupied(x) => unsafe { &*(&*x.get().0 as *const str) },
-            Entry::Vacant(x) => unsafe { &*(&*x.insert((source, includes)).0 as *const str) },
-        }
-    }
+		let mut includes: HashSet<Box<str>> = HashSet::new();
+
+		// - While there is a next include file
+		// 		- check that path isnt already included
+		// 		- add the include path to set
+		// 		- insert source at location
+		// 		- repeat
+
+		while let Some((line, include)) = find_next_include(&source) {
+			if !includes.insert(include.into()) {
+				panic!("Include path {} already seen when processing file {}", include, path);
+			}
+			// create string slice from start of string to beginning of line with include
+			//
+			// get source file of include path 
+			//
+			// create string slice from end of line with include and end of string
+			//
+			// concatenate all three slices
+
+			let first = {
+				// SAFETY: line is derived from source and is guaranteed by safe code to be within 
+				// valid range for source
+				let offset = unsafe {
+					source.as_ptr().offset_from(line.as_ptr())
+				}.try_into().expect("line must be after or equal to source start");
+				// SAFETY: 
+				// - start is the guaranteed to be the start of a utf-8 char it is equal to the start of source
+				// - end is guaranteed to be the end of a utf-8 char because it is one before the start of line
+				// - all bytes in this slice are guaranteed to be valid utf-8 because it comes from a source
+				unsafe{
+					std::str::from_utf8_unchecked(
+						// SAFETY: slice between start of source and start of line with include is guaranteed to be valid
+						std::slice::from_raw_parts(source.as_ptr(), offset)
+					)
+				}
+			};
+			let middle = {
+				// Check if file has been loaded from disk or is a constant source
+				let disk_source_file = self.get_file_from_disk(include);
+				let const_source_file = self.get_file_from_constant_source(include);
+
+				match (disk_source_file, const_source_file) {
+					(Some(source), None) | (None, Some(source)) => source,
+					// If both return a source file or neither return one, then panic
+					(Some(_), Some(_)) => {
+						panic!("Requested shader path {} is available on disk and in constant shaders", path);
+					}
+					(None, None) => {
+						panic!("Requested shader path {} not found on disk or in constant shaders", path);
+					}
+				}
+			};
+			let last = {
+				// get offset from start of source and end of line and 
+				// create a pointer with that offset from start of source
+				// 
+				// Note: This pointer CANNOT be created from pointer of line
+				// because line DOES NOT have provenance over the entire string
+				//
+				// get distance from end of line to end of source
+				//
+				// create new string slice
+				
+				let start_offset: usize = usize::try_from(unsafe {
+					source.as_ptr().offset_from(line.as_ptr())
+				}).expect("line must be after or equal to source start")
+				+ line.len();
+
+				let len = source.len() - start_offset;
+
+				// SAFETY: 
+				// - start is the guaranteed to be the start of a utf-8 char it is one past the end of line
+				// - end is guaranteed to be the end of a utf-8 char because it is the same as the end of source
+				// - all bytes in this slice are guaranteed to be valid utf-8 because it comes from a source
+				unsafe{
+					std::str::from_utf8_unchecked(
+						// SAFETY: slice between start of source and start of line with include is guaranteed to be valid
+						std::slice::from_raw_parts(
+							// SAFETY: start_offset is guaranteed to be within source
+							source.as_ptr().add(start_offset),
+							len
+						)
+					)
+				}
+			};
+
+			source = first.to_string() + middle + last;
+		}
+
+		return source;
+
+		// Go line by line and find the first line that contains an include directive
+		// if its present
+		fn find_next_include(input: &str) -> Option<(&str, &str)> {
+			input.lines().enumerate().filter_map(|(i, line)| {
+				let path_container = line.trim().split_once("#include")?.1.trim();
+				(|| {
+					Some((line, path_container.split_once('<')?.1.rsplit_once('>')?.0))
+				})()
+				.or(None)
+			}).next()
+		}
+	}
 
 	/// Calls [Self::get_source] and creates a [ShaderModule] from the returned source
     fn read_and_get_module(&self, path: &str, context: &WGPUContext) -> ShaderModule {
-        let file = Cow::Borrowed(self.get_source(path));
+		// - Get source string
+		// - Create Shader Module
+        let file = Cow::Owned(self.get_source_new(path));
         context
             .device()
             .create_shader_module(ShaderModuleDescriptor {
@@ -236,12 +308,16 @@ impl ShaderManager {
         template: &RenderPipelineDescriptorTemplate,
         context: &WGPUContext,
     ) -> RenderPipeline {
+		// - Get paths from paths from the templates
+		// - Get the modules
+		// - Create the pipeline descriptor
+		// - Compile it
         let paths = template.get_module_paths();
         let modules = (
             self.get_module(paths.0, context),
             paths.1.map(|x| self.get_module(x, context)),
         );
-        let descriptor: RenderPipelineDescriptor = template.resolve(modules.0, modules.1);
+        let descriptor = template.resolve(modules.0, modules.1);
 
         context.device().create_render_pipeline(&descriptor)
     }
@@ -260,6 +336,8 @@ impl ShaderManager {
             .lock()
             .unwrap()
             .get_mut(label)
+			// TODO: Change this expect to a pattern match inside the match block with 
+			// a proper error message
             .expect("Tried to access a render pipeline that wasn't registered")
         {
             // SAFETY: The only thing that can invalidate the lifetime of the returned reference
@@ -273,7 +351,8 @@ impl ShaderManager {
                     // putting a new pipeline into the map could invalidate old references,
                     // but we ensure that this is only done if there wasn't already a pipeline there
                     &**x.get_or_insert_with(
-                        || Box::new(self.compile_pipeline(template, context)), // BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
+						// BE VERY CAREFUL ADDING ANY EXTRA LINES OF CODE HERE
+                        || Box::new(self.compile_pipeline(template, context)), 
                     ) as *const RenderPipeline
                 )
             },
@@ -287,6 +366,7 @@ impl ShaderManager {
         label: &str,
         template: RenderPipelineDescriptorTemplate,
     ) {
+		// TODO: Change this to only allocate the label if insertion is necessary
         match self.render_pipelines.lock().unwrap().entry(label.into()) {
             // we only have shared access to self here so there may be borrows into
             // any existing pipeline here.
@@ -300,13 +380,41 @@ impl ShaderManager {
             }
         }
     }
+	
+	/// Registers a new constant shader source file. This is intended for source 
+	/// files which are included in the binary which cannot be obtained again after a reload
+	/// 
+	/// *Note*: Shader source is not verified here, but rather when [Self::get_render_pipeline] 
+	/// is called
+	///
+	/// # Panics
+	/// When a shader source was already registered at this path but the old contents 
+	/// do not match the new contents
+	///
+	/// # Question
+	/// Should this return a result to indicate an error instead of panicking
+	pub fn register_constant_source(&self, path: &str, source: Box<str>) {
+		let mut lock = self.constant_source_files
+			.lock().unwrap();
+		match lock.get(path) {
+			Some(old_source) if *old_source == source => (),
+			Some(old_source) => {
+				panic!("Conflicting source files registered at path {}: \n\n Old Source : {} \n\n New Source: {} \n\n",
+					path,
+					old_source,
+					source,
+				);
+			}
+			None => {lock.insert(path.into(), source);},
+		}
+	}
 
 	/// Remove all resolved shaders and pipelines
     pub fn reload(&mut self) {
         // These mutable operations are fine because we have mutable access to self
         // so there are no borrows of this data
 		// TODO: Change these locks to get_mut
-        self.shader_source.lock().unwrap().clear();
+        self.source_files.lock().unwrap().clear();
         self.shader_modules.lock().unwrap().clear();
         self.render_pipelines
             .lock()
@@ -314,6 +422,16 @@ impl ShaderManager {
             .iter_mut()
             .for_each(|(_, (_, x))| *x = None);
     }
+}
+
+/// This is intended for use in ShaderManager to extend the lifetimes of the shader 
+/// source and shader modules to the lifetime of the ShaderModule reference instead 
+/// of the [Mutex] lock obtained within each function.
+///
+/// Safety comments at each call location will refer here instead of providing 
+/// justification at callsite
+unsafe fn extend_lifetime<'a, 'b, T: ?Sized>(input: &'a T) -> &'b T {
+	unsafe {&*(input as *const T)}
 }
 
 /// A template that can be used to instantiate a [`RenderPipelineDescriptor`]
