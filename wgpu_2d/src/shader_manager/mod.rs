@@ -85,21 +85,10 @@ pub struct ShaderManager {
     >,
 }
 
+/// Internal Implementations
 impl ShaderManager {
-	/// Creates a new [ShaderManager]
-    pub fn new(directory_path: &str) -> Self {
-        Self {
-            directory_path: directory_path.into(),
-            source_files: RwLock::new(HashMap::new()),
-			constant_source_files: RwLock::new(HashMap::new()),
-            shader_modules: RwLock::new(HashMap::new()),
-            render_pipelines: RwLock::new(HashMap::new()),
-        }
-    }
-
 	/// Searches [Self::source_files] for the given path and returns it if present
 	/// or tries to read it from disk and if found, caches and returns it
-	///
 	fn get_file_from_disk<'a>(&'a self, path: &str) -> Option<&'a str> {
 		match self.source_files.read().unwrap().get(path) {
 			// SAFETY: The only thing that can invalidate the lifetime of the returned reference
@@ -332,6 +321,20 @@ impl ShaderManager {
 
         context.device().create_render_pipeline(&descriptor)
     }
+}
+
+/// Public Interface
+impl ShaderManager {
+	/// Creates a new [ShaderManager]
+    pub fn new(directory_path: &str) -> Self {
+        Self {
+            directory_path: directory_path.into(),
+            source_files: RwLock::new(HashMap::new()),
+			constant_source_files: RwLock::new(HashMap::new()),
+            shader_modules: RwLock::new(HashMap::new()),
+            render_pipelines: RwLock::new(HashMap::new()),
+        }
+    }
 
 	/// Returns an already compiled pipeline with the [RenderPipelineDescriptor] template 
 	/// registered with the given label.
@@ -342,7 +345,6 @@ impl ShaderManager {
         label: &str,
         context: &WGPUContext,
     ) -> &'a RenderPipeline {
-
 		match self.render_pipelines.read().unwrap().get(label) {
 			// SAFETY: The only thing that can invalidate the lifetime of the returned reference
 			// is if the backing Box is deallocated (moving a box does not invalidate pointers into it)

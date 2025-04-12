@@ -1,3 +1,5 @@
+const COMMON_INCLUDE: &str = include_str!("../shaders/common.wgsl");
+
 mod point {
     use wgpu::*;
 
@@ -18,6 +20,8 @@ mod point {
         pub color: Vector4<f32>,
         pub position: Vector2<f32>,
     }
+
+	const POINTS_SHADER: &str = include_str!("../shaders/points.wgsl");
 
     pub struct PointRenderer {
         points: BufferAndData<Vec<Point>>,
@@ -82,6 +86,8 @@ mod point {
                 multiview: None,
                 cache: None,
             };
+            shader_manager.register_constant_source("points.wgsl", POINTS_SHADER.into());
+            shader_manager.register_constant_source("common.wgsl", super::COMMON_INCLUDE.into());
             shader_manager.register_render_pipeline("Point Renderer Pipeline", descriptor_template);
 
             let points = BufferAndData::new(points, context);
@@ -176,6 +182,8 @@ mod triangle {
         }
     }
 
+	const TRIANGLE_SHADER: &str = include_str!("../shaders/triangle.wgsl");
+
     pub struct TriangleListRenderer {
         triangles: BufferAndData<Vec<Triangle>>,
     }
@@ -238,6 +246,8 @@ mod triangle {
                 multiview: None,
                 cache: None,
             };
+            shader_manager.register_constant_source("triangle.wgsl", TRIANGLE_SHADER.into());
+            shader_manager.register_constant_source("common.wgsl", super::COMMON_INCLUDE.into());
             shader_manager.register_render_pipeline("triangles", render_pipeline_template);
 
             Self { triangles }
@@ -280,6 +290,8 @@ mod rect {
         pub size: Vector2<f32>,
         pub rotation: f32,
     }
+
+	const RECT_SHADER: &str = include_str!("../shaders/rect.wgsl");
 
     pub struct RectangleRenderer {
         rectangles: BufferAndData<Vec<CenterRect>>,
@@ -345,6 +357,8 @@ mod rect {
                 multiview: None,
                 cache: None,
             };
+            shader_manager.register_constant_source("rect.wgsl", RECT_SHADER.into());
+            shader_manager.register_constant_source("common.wgsl", super::COMMON_INCLUDE.into());
             shader_manager.register_render_pipeline("rects", render_pipeline_template);
 
             Self { rectangles }
@@ -397,6 +411,8 @@ mod circle {
         pub position: Vector2<f32>,
         pub radius: f32,
     }
+
+	const CIRCLE_SHADER: &str = include_str!("../shaders/circle.wgsl");
 
     pub struct CircleRenderer {
         circles: BufferAndData<Vec<Circle>>,
@@ -461,6 +477,8 @@ mod circle {
                 multiview: None,
                 cache: None,
             };
+            shader_manager.register_constant_source("circle.wgsl", CIRCLE_SHADER.into());
+            shader_manager.register_constant_source("common.wgsl", super::COMMON_INCLUDE.into());
             shader_manager.register_render_pipeline("circle", render_pipeline_template);
 
             Self { circles }
@@ -511,6 +529,8 @@ mod ring {
         pub outer_radius: f32,
         pub inner_radius: f32,
     }
+
+	const RING_SHADER: &str = include_str!("../shaders/rings.wgsl");
 
     pub struct RingRenderer {
         rings: BufferAndData<Vec<Ring>>,
@@ -576,6 +596,8 @@ mod ring {
                 multiview: None,
                 cache: None,
             };
+            shader_manager.register_constant_source("rings.wgsl", RING_SHADER.into());
+            shader_manager.register_constant_source("common.wgsl", super::COMMON_INCLUDE.into());
             shader_manager.register_render_pipeline("Ring", render_pipeline_template);
 
             Self { rings }
@@ -676,6 +698,8 @@ mod texture {
     // 		&self.data[(index * self.columns)..((index + 1) * self.columns)]
     // 	}
     // }
+
+	const TEXTURE_SHADER: &str = include_str!("../shaders/texture.wgsl");
 
     pub struct TextureRenderer {
         rect: BufferAndData<CenterRect>,
@@ -867,6 +891,8 @@ mod texture {
                 cache: None,
             };
 
+            shader_manager.register_constant_source("texture.wgsl", TEXTURE_SHADER.into());
+            shader_manager.register_constant_source("common.wgsl", super::COMMON_INCLUDE.into());
             shader_manager.register_render_pipeline("texture", render_pipeline_template);
 
             let bind_group = context.device().create_bind_group(&BindGroupDescriptor {

@@ -13,14 +13,14 @@ use wgpu_2d::rendering::Circle;
 use wgpu_2d::rendering::{CircleRenderer, Renderer2D};
 use wgpu_2d::shader_manager::ShaderManager;
 use wgpu_2d::timer::Timer;
-use wgpu_2d::wgpu_context::{WGPUContext, SHADER_DIRECTORY};
+use wgpu_2d::wgpu_context::WGPUContext;
 
 use winit::keyboard::{Key, NamedKey};
 
 pub fn main() {
     let mut world = World::new();
     world
-		.add_resource(ShaderManager::new(SHADER_DIRECTORY))
+		.add_resource(ShaderManager::new(""))
         .add_plugin(WindowPlugin::new("Test App"))
         .add_system(Startup, (spawn_character, set_window_type))
 		.add_system(PreUpdate, reset_timer)
