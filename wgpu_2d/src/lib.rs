@@ -1,18 +1,8 @@
-pub use winit;
-
-pub mod input;
 pub mod math;
 pub mod rendering;
 pub mod shader_manager;
 pub mod timer;
 pub mod wgpu_context;
-
-#[cfg(feature = "ecs")]
-pub mod ecs;
-#[cfg(feature = "ecs")]
-pub use my_ecs;
-
-mod maybe_thread;
 
 #[cfg(test)]
 mod tests {

@@ -1,9 +1,9 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
 
-use crate::input::*;
-
 use gamepad_input::{GamepadMap, GamepadID, XInputGamepad};
+use kbm_input::keyboard::KeyMap;
+use kbm_input::mouse::MouseMap;
 use winit::event::{DeviceEvent, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
@@ -173,7 +173,7 @@ impl AppInner {
         ]);
 
         let stick_pos = Vector2::new(self.gamepad.map(|x| x.right_thumb).unwrap_or(
-			((self.input.mouse_map.mouse_position() - center) / 200. * Vector2::new([1., -1.])).into_inner()
+			((Vector2::new(self.input.mouse_map.mouse_position()) - center) / 200. * Vector2::new([1., -1.])).into_inner()
 		));
         let len = stick_pos.mag().min(1.) * 200.;
         let angle = stick_pos.angle();
