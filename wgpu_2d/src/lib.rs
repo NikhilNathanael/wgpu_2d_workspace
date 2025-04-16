@@ -25,9 +25,10 @@ mod tests {
     }
 }
 
-// TODO: Finish Gamepad map and gamepad aim-assist
+// (Finished): Finish Gamepad map and gamepad aim-assist
 // TODO: Remove winit as dependancy of lib and make users directly
 //       use winit instead
+//      - Move input handling to separate crate with winit as a dependency
 //
 // (Finished) : Timer struct
 // 		- total time since start
@@ -44,7 +45,7 @@ mod tests {
 // (Finished) : Add derive macros for Buffer data
 // 		- One macro for Vertex data
 // 		- One macro for Uniform data
-// TODO : Unify the renderers for each type of primitive (point, triangle,
+// TODO (Changed) : Unify the renderers for each type of primitive (point, triangle,
 //        center_rect and circle for now) into a single struct with a generic parameter
 //      - Define a trait for each type of primitive
 //      	- This trait should include

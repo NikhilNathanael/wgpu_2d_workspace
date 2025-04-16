@@ -108,10 +108,6 @@ impl Plugin for WindowPlugin {
         _world
 			// Window Event reciever
             .add_resource(WindowEvents(Mutex::new(event_rx)))
-            .add_resource(KeyMap::new())
-            .add_resource(MouseMap::new())
-            .add_resource(GamepadMap::new())
-            .add_resource(Timer::new())
             .add_resource(WindowClose(close_tx));
 
         let (window, render_context) = window_rx.recv().unwrap();
