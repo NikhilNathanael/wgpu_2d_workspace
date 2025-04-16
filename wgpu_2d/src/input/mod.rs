@@ -252,39 +252,5 @@ pub mod mouse_map {
     }
 }
 
-pub mod gamepad_map {
-    use gamepad_input::wrapper::*;
-    pub struct GamepadMap {
-        prev: [Option<XInputGamepad>; 4],
-        current: [Option<XInputGamepad>; 4],
-    }
-
-    impl GamepadMap {
-        pub fn new() -> Self {
-            Self {
-                prev: [None; 4],
-                current: [None; 4],
-            }
-        }
-
-        pub fn current(&self, id: GamepadID) -> Option<&XInputGamepad> {
-            self.current[id as u32 as usize].as_ref()
-        }
-
-        pub fn prev(&self, id: GamepadID) -> Option<&XInputGamepad> {
-            self.prev[id as u32 as usize].as_ref()
-        }
-
-        pub fn update(&mut self) {
-            self.prev = self.current;
-            self.current[0] = XInputGamepad::get_state(GamepadID::Id_0);
-            self.current[1] = XInputGamepad::get_state(GamepadID::Id_1);
-            self.current[2] = XInputGamepad::get_state(GamepadID::Id_2);
-            self.current[3] = XInputGamepad::get_state(GamepadID::Id_3);
-        }
-    }
-}
-
-pub use gamepad_map::*;
 pub use key_map::*;
 pub use mouse_map::*;

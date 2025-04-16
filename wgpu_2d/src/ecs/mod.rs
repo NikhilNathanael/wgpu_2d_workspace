@@ -13,7 +13,7 @@ use winit::event::WindowEvent;
 use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::{Window, WindowId};
 
-use crate::input::{GamepadMap, KeyMap, MouseMap};
+use crate::input::{KeyMap, MouseMap};
 use crate::rendering::{
     CircleRenderer, PointRenderer, RectangleRenderer, Renderer2D, RingRenderer, TextureRenderer,
     TriangleListRenderer,
@@ -143,7 +143,6 @@ impl Resource for ShaderManager {}
 
 impl Resource for KeyMap {}
 impl Resource for MouseMap {}
-impl Resource for GamepadMap {}
 
 impl Resource for Timer {}
 

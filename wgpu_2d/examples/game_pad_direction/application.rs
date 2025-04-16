@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::input::*;
 
-use gamepad_input::{GamepadID, XInputGamepad};
+use gamepad_input::{GamepadMap, GamepadID, XInputGamepad};
 use winit::event::{DeviceEvent, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
@@ -43,7 +43,7 @@ impl AppInner {
         let window = Arc::new(window);
 
         // Create shader_manager
-        let shader_manager = ShaderManager::new(SHADER_DIRECTORY);
+        let shader_manager = ShaderManager::new("");
 
         // Create input manager
         let input = Input::new();
@@ -110,11 +110,11 @@ impl AppInner {
     pub fn update_scene(&mut self) {
         // Handle Gamepad state
         match self.gamepad {
-            None => self.gamepad = self.input.gamepad_map.current(GamepadID::Id_0).copied(),
+            None => self.gamepad = self.input.gamepad_map.current(GamepadID::Id0).copied(),
             Some(ref mut gamepad) => {
                 match (
-                    self.input.gamepad_map.current(GamepadID::Id_0),
-                    self.input.gamepad_map.prev(GamepadID::Id_0),
+                    self.input.gamepad_map.current(GamepadID::Id0),
+                    self.input.gamepad_map.prev(GamepadID::Id0),
                 ) {
                     (Some(current), Some(prev)) => {
                         const SENSITIVITY: f32 = 4.0;
